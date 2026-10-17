@@ -1997,7 +1997,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .modal-intro { margin: 0 0 16px; color: rgba(255,255,255,.43); font-size: 9px; line-height: 1.6; }
 .friends-modal article { min-height: 67px; padding: 9px; display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 12px; border-radius: 12px; }
 .friends-modal article:hover { background: rgba(255,255,255,.035); }
-.friends-modal article img { width: 46px; height: 46px; border-radius: 12px; object-fit: cover; }
+.mock-friend-avatar { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; color: #fff; font-size: 11px; font-style: normal; font-weight: 800; letter-spacing: .04em; }
 .friends-modal article > div { display: flex; flex-direction: column; gap: 5px; }
 .friends-modal article b { font-size: 11px; }
 .friends-modal article small { color: rgba(255,255,255,.35); font-size: 8px; }
@@ -2160,7 +2160,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   --shell-base: #110c0f;
   --shell-deep: #090609;
   --shell-wash: 255,79,160;
-  --page-art: url('../hype-branding/icone/hype-avatar.svg');
+  --page-art: url('/assets/hype-avatar.svg');
   --shell-art-opacity: .1;
 }
 .theme-hype .sidebar { background: linear-gradient(180deg, rgba(24,16,21,.94), rgba(13,9,12,.86)); }
@@ -2688,10 +2688,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 .theme-bibliotheque:has(.library-focus-hype),
 .theme-bibliotheque:has(.collection-game[data-game='hype']:hover) {
-  --page-art: url('../hype-branding/icone/hype-avatar.svg');
+  --page-art: url('/assets/hype-avatar.svg');
 }
 .library-ambient .ambient-hype {
-  background-image: radial-gradient(circle at 65% 30%, rgba(255,79,160,.55), transparent 32%), url('../hype-branding/icone/hype-avatar.svg');
+  background-image: radial-gradient(circle at 65% 30%, rgba(255,79,160,.55), transparent 32%), url('/assets/hype-avatar.svg');
   background-size: cover, 36%;
   background-repeat: no-repeat;
   background-position: center, 76% 24%;

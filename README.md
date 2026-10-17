@@ -9,7 +9,7 @@ pnpm install
 pnpm run dev
 ```
 
-La connexion utilise Discord via Supabase. Consultez [SUPABASE_AUTH.md](./SUPABASE_AUTH.md) avant le premier test.
+Copiez `.env.example` vers `.env.local`, puis renseignez l’URL et la clé publique Supabase du projet avant le premier test de connexion Discord.
 
 ## Vérification
 
@@ -30,5 +30,3 @@ Les builds de release et les mises à jour automatiques sont produits par GitHub
 - Installation locale, vérification et lancement de Hype via Tauri
 - Installation NSIS et mises à jour signées via GitHub Releases
 - Interface entièrement en français
-
-Consultez [ARCHITECTURE.md](./ARCHITECTURE.md) pour les décisions techniques et les prochaines phases.
