@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Session, User } from '@supabase/supabase-js';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
-import { launcherAdapter, type HypeInstallReport } from './launcher/adapter';
+import { launcherAdapter, type HypeDownloadProgress, type HypeInstallReport } from './launcher/adapter';
 import { GamePageHero } from './components/GamePage';
 import { isUsernameAvailable, listenForAuthCallbacks, loadProfile, normalizeUsername, profileFromUser, saveProfile as saveProfileRecord, signInWithDiscord, validateUsername, type PresenceStatus, type ProfileData } from './lib/auth';
 import { loadRelationships, removeFriend, respondToFriendRequest, searchProfiles, sendFriendRequest, type FriendProfile } from './lib/friends';
@@ -36,7 +36,6 @@ import {
   Monitor,
   MoreHorizontal,
   Newspaper,
-  Pause,
   Play,
   RefreshCw,
   Search,
@@ -502,7 +501,7 @@ function Topbar({ title, setPage }: { title: string; setPage: (page: Page) => vo
       </div>
       <div className="topbar-menu-wrap">
         <button className={`icon-button ${openPanel === 'notifications' ? 'active' : ''}`} aria-label="Notifications" aria-expanded={openPanel === 'notifications'} onClick={() => { window.dispatchEvent(new Event('close-profile-menu')); setOpenPanel(openPanel === 'notifications' ? null : 'notifications'); setSearchOpen(false); }}><Bell size={18} />{hasUnread && <i />}</button>
-        {openPanel === 'notifications' && <div className="topbar-drawer notifications-drawer"><div className="drawer-heading"><div><h3>Notifications</h3><span>{hasUnread ? '3 nouvelles' : 'À jour'}</span></div>{hasUnread && <button onClick={() => setHasUnread(false)}>Tout lire</button>}</div><button className="notification-item"><span className="notification-symbol achievement"><Trophy size={16} /></span><span><b>Succès déverrouillé</b><small>« Première nuit » · L.A LifeRP</small></span><em>2 h</em></button><button className="notification-item"><span className="notification-symbol update"><Download size={16} /></span><span><b>Hype est disponible</b><small>Version 1.0.0 · 8,4 Go</small></span><em>4 h</em></button><button className="notification-item"><span className="notification-symbol social"><Users size={16} /></span><span><b>Nox vous invite</b><small>Rejoindre sa partie de Hype</small></span><em>5 h</em></button></div>}
+        {openPanel === 'notifications' && <div className="topbar-drawer notifications-drawer"><div className="drawer-heading"><div><h3>Notifications</h3><span>{hasUnread ? '3 nouvelles' : 'À jour'}</span></div>{hasUnread && <button onClick={() => setHasUnread(false)}>Tout lire</button>}</div><button className="notification-item"><span className="notification-symbol achievement"><Trophy size={16} /></span><span><b>Succès déverrouillé</b><small>« Première nuit » · L.A LifeRP</small></span><em>2 h</em></button><button className="notification-item"><span className="notification-symbol update"><Download size={16} /></span><span><b>Hype est disponible</b><small>Version 0.26.0 · environ 345 Mo</small></span><em>4 h</em></button><button className="notification-item"><span className="notification-symbol social"><Users size={16} /></span><span><b>Nox vous invite</b><small>Rejoindre sa partie de Hype</small></span><em>5 h</em></button></div>}
       </div>
       <div className="window-buttons" aria-hidden="true"><button><Minus size={15} /></button><button><Maximize2 size={13} /></button><button><X size={15} /></button></div>
     </header>
@@ -703,12 +702,11 @@ type DownloadControls = {
   installState: InstallState;
   installReport: HypeInstallReport | null;
   progress: number;
-  paused: boolean;
+  downloadInfo: HypeDownloadProgress | null;
   hypeRunning: boolean;
   installHype: () => void;
   launchHype: () => Promise<boolean>;
   stopHype: () => Promise<boolean>;
-  togglePause: () => void;
   cancelDownload: () => void;
 };
 
@@ -785,7 +783,7 @@ function LibraryPage({ setPage, installState, progress, hypeRunning, installHype
             <img className={`spotlight-logo ${isLife ? 'life' : 'hype'}`} src={isLife ? '/assets/laliferp-wordmark.png' : hypeLogoWhite} alt={isLife ? 'L.A LifeRP' : 'Hype'} />
             <p>{isLife ? 'Reprenez votre histoire au cœur d’un Los Angeles façonné par ses joueurs.' : 'Créez votre personnage, publiez et laissez un monde peuplé d’IA réagir à votre histoire.'}</p>
             <div className="spotlight-meta">
-              <span><Clock3 size={15} /> {isLife ? '86,4 h jouées' : installState === 'installed' ? 'Prêt à jouer' : '8,4 Go requis'}</span>
+              <span><Clock3 size={15} /> {isLife ? '86,4 h jouées' : installState === 'installed' ? 'Prêt à jouer' : 'Environ 345 Mo requis'}</span>
               <span><Trophy size={15} /> {isLife ? '16 / 32 succès' : '24 succès'}</span>
               <span><Users size={15} /> {isLife ? '8 amis jouent' : '1 ami joue'}</span>
             </div>
@@ -811,7 +809,7 @@ function LibraryPage({ setPage, installState, progress, hypeRunning, installHype
         </button>
         <button data-game="hype" className={`collection-game ${selected === 'hype' ? 'selected' : ''}`} onClick={() => setSelected('hype')} onDoubleClick={() => setPage('hype')}>
           <span className="collection-cover logo-cover hype-logo-cover"><img src={hypeIcon} alt="" />{installState === 'downloading' && <i className="cover-progress" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties} />}</span>
-          <span className="collection-game-copy"><small>Æ ORIGINALS</small><b>Hype</b><em>{hypeRunning ? 'En jeu' : installState === 'installed' ? 'Prêt à jouer' : installState === 'downloading' ? `${progress} % · 42 Mo/s` : 'Disponible'}</em></span>
+          <span className="collection-game-copy"><small>Æ ORIGINALS</small><b>Hype</b><em>{hypeRunning ? 'En jeu' : installState === 'installed' ? 'Prêt à jouer' : installState === 'downloading' ? `${progress} % · Téléchargement GitHub` : 'Disponible'}</em></span>
           {hypeRunning ? <X className="collection-quick-action" size={18} /> : installState === 'installed' ? <Play className="collection-quick-action" size={18} fill="currentColor" /> : <Download className="collection-quick-action" size={18} />}
         </button>
       </section>
@@ -820,11 +818,10 @@ function LibraryPage({ setPage, installState, progress, hypeRunning, installHype
   );
 }
 
-function DownloadsPage({ installState, installReport, progress, paused, hypeRunning, installHype, launchHype, stopHype, togglePause, cancelDownload }: DownloadControls) {
+function DownloadsPage({ installState, installReport, progress, downloadInfo, hypeRunning, installHype, launchHype, stopHype, cancelDownload }: DownloadControls) {
   const [queue, setQueue] = useState<{ id: string; name: string; detail: string; art: string }[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const phase = progress > 88 ? 'Vérification' : progress > 72 ? 'Installation' : 'Téléchargement';
-  const remaining = Math.max(1, Math.ceil((100 - progress) * 0.18));
+  const phase = downloadInfo?.phase === 'extract' ? 'Installation' : downloadInfo?.phase === 'verify' ? 'Vérification' : 'Téléchargement';
   const reorderQueue = (targetId: string) => {
     if (!draggedId || draggedId === targetId) return;
     setQueue((items) => {
@@ -846,19 +843,16 @@ function DownloadsPage({ installState, installReport, progress, paused, hypeRunn
       {installState === 'downloading' && <section className="active-transfer state-downloading">
         <div className="transfer-art"><img src={hypeIcon} alt="Hype" /></div>
         <div className="transfer-main">
-          <div className="transfer-heading"><div><h2>Hype</h2><p>{phase} · Version {installReport?.version || '0.16'}</p></div><strong>{paused ? 'En pause' : `${remaining} min restantes`}</strong></div>
+          <div className="transfer-heading"><div><h2>Hype</h2><p>{phase} · Version {installReport?.version || '0.26.0'}</p></div><strong>GitHub Release</strong></div>
           <div className="transfer-track"><i style={{ width: `${progress}%` }} /></div>
-          <div className="transfer-details"><span>{`${(8.4 * progress / 100).toFixed(1)} Go sur 8,4 Go`}</span><b>{progress} %</b></div>
+          <div className="transfer-details"><span>{downloadInfo?.total ? `${formatInstallSize(downloadInfo.downloaded)} sur ${formatInstallSize(downloadInfo.total)}` : 'Préparation du téléchargement…'}</span><b>{progress} %</b></div>
           <div className="transfer-performance">
-            <div><Wifi size={15} /><span><small>RÉSEAU</small><b>{!paused ? '42,0 Mo/s' : '0 Mo/s'}</b></span></div>
-            <div><Gauge size={15} /><span><small>PIC</small><b>48,6 Mo/s</b></span></div>
-            <div><HardDrive size={15} /><span><small>DISQUE</small><b>{!paused ? '58,4 Mo/s' : '0 Mo/s'}</b></span></div>
-            <div><span><small>ESPACE DISPONIBLE</small><b>286 Go</b></span></div>
-            <div className={`inline-speed-graph ${paused ? 'idle' : ''}`}>{[38,52,44,68,61,78,70,87,74,91,82,88,76,94,84,90].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
+            <div><Wifi size={15} /><span><small>SOURCE</small><b>GitHub</b></span></div>
+            <div><Gauge size={15} /><span><small>PROGRESSION</small><b>{progress} %</b></span></div>
+            <div><HardDrive size={15} /><span><small>ÉTAPE</small><b>{phase}</b></span></div>
           </div>
         </div>
         <div className="transfer-controls">
-          <button className="transfer-primary" onClick={togglePause}>{paused ? <Play size={18} fill="currentColor" /> : <Pause size={18} />}{paused ? 'Reprendre' : 'Pause'}</button>
           <button className="transfer-secondary" onClick={cancelDownload}>Annuler</button>
         </div>
       </section>}
@@ -871,7 +865,7 @@ function DownloadsPage({ installState, installReport, progress, paused, hypeRunn
 
       {installState === 'installed' && <section className="download-status-card installed">
         <span className="download-ready-art"><img src={hypeIcon} alt="" /><Check size={18} /></span>
-        <div><span>TOUT EST À JOUR</span><h2>Hype est prêt à jouer</h2><p>{installReport?.verifiedFiles ?? 0} fichier(s) vérifié(s) · Version {installReport?.version || '0.16'}</p><code title={installReport?.path}>{installReport?.path || 'Installation locale'}</code></div>
+        <div><span>TOUT EST À JOUR</span><h2>Hype est prêt à jouer</h2><p>{installReport?.verifiedFiles ?? 0} fichier(s) vérifié(s) · Version {installReport?.version || '0.26.0'}</p><code title={installReport?.path}>{installReport?.path || 'Installation locale'}</code></div>
         <button className={`transfer-primary ${hypeRunning ? 'stop-game' : ''}`} onClick={() => void (hypeRunning ? stopHype() : launchHype())}>{hypeRunning ? <X size={18} /> : <Play size={18} fill="currentColor" />} {hypeRunning ? 'Fermer' : 'Jouer'}</button>
       </section>}
 
@@ -898,7 +892,7 @@ function DownloadsPage({ installState, installReport, progress, paused, hypeRunn
             </article>
           ))}
         </div>
-        {installState === 'installed' && <div className="download-history"><Check size={16} /><span><b>Installation de Hype vérifiée</b><small>{installReport?.version ? `Version ${installReport.version}` : 'Version 0.16'} · {installReport?.verifiedFiles ?? 0} fichier(s)</small></span><em>AUJOURD’HUI</em></div>}
+        {installState === 'installed' && <div className="download-history"><Check size={16} /><span><b>Installation de Hype vérifiée</b><small>{installReport?.version ? `Version ${installReport.version}` : 'Version 0.26.0'} · {installReport?.verifiedFiles ?? 0} fichier(s)</small></span><em>AUJOURD’HUI</em></div>}
       </section>
     </main>
   );
@@ -910,6 +904,8 @@ type HypeInstallationActions = {
   hypeRunning: boolean;
   onInstall: () => void;
   onVerify: () => Promise<HypeInstallReport>;
+  onUpdate: () => Promise<string>;
+  onRepair: () => Promise<string>;
   onReveal: () => Promise<void>;
   onForget: () => Promise<void>;
   onUninstall: () => Promise<void>;
@@ -921,8 +917,8 @@ function formatInstallSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1_048_576))} Mo`;
 }
 
-function HypeInstallationPanel({ installState, installReport, hypeRunning, onInstall, onVerify, onReveal, onForget, onUninstall }: HypeInstallationActions) {
-  const [busy, setBusy] = useState<'verify' | 'update' | 'uninstall' | null>(null);
+function HypeInstallationPanel({ installState, installReport, hypeRunning, onInstall, onVerify, onUpdate, onRepair, onReveal, onForget, onUninstall }: HypeInstallationActions) {
+  const [busy, setBusy] = useState<'verify' | 'update' | 'repair' | 'uninstall' | null>(null);
   const [feedback, setFeedback] = useState('');
   const [manageOpen, setManageOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<'forget' | 'uninstall' | null>(null);
@@ -942,10 +938,17 @@ function HypeInstallationPanel({ installState, installReport, hypeRunning, onIns
   const checkUpdate = async () => {
     setBusy('update');
     setFeedback('');
-    window.setTimeout(() => {
-      setFeedback('Le service GitHub n’est pas encore connecté. Votre version locale reste inchangée.');
-      setBusy(null);
-    }, 650);
+    try { setFeedback(await onUpdate()); }
+    catch (error) { setFeedback(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(null); }
+  };
+
+  const repair = async () => {
+    setBusy('repair');
+    setFeedback('');
+    try { setFeedback(await onRepair()); }
+    catch (error) { setFeedback(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(null); }
   };
 
   const confirmManagement = async () => {
@@ -990,7 +993,7 @@ function HypeInstallationPanel({ installState, installReport, hypeRunning, onIns
         <div className="maintenance-actions">
           <button disabled={busy !== null || hypeRunning} onClick={() => void verify()}><ShieldCheck size={19} /><span><b>{busy === 'verify' ? 'Vérification…' : 'Vérifier les fichiers'}</b><small>Contrôle les fichiers à partir du manifeste local.</small></span></button>
           <button disabled={busy !== null} onClick={() => void checkUpdate()}><RefreshCw className={busy === 'update' ? 'spinning' : ''} size={19} /><span><b>{busy === 'update' ? 'Recherche…' : 'Rechercher une mise à jour'}</b><small>Compare la version installée au manifeste GitHub.</small></span></button>
-          <button disabled={healthy || busy !== null || hypeRunning}><Wrench size={19} /><span><b>Réparer l’installation</b><small>{healthy ? 'Aucune réparation nécessaire.' : 'Retélécharge les fichiers invalides.'}</small></span></button>
+          <button disabled={healthy || busy !== null || hypeRunning} onClick={() => void repair()}><Wrench className={busy === 'repair' ? 'spinning' : ''} size={19} /><span><b>{busy === 'repair' ? 'Réparation…' : 'Réparer l’installation'}</b><small>{healthy ? 'Aucune réparation nécessaire.' : 'Retélécharge les fichiers invalides.'}</small></span></button>
         </div>
         {hypeRunning && <p className="installation-feedback warning"><AlertTriangle size={14} /> Fermez Hype pour vérifier, réparer ou désinstaller ses fichiers.</p>}
         {feedback && <p className="installation-feedback"><Check size={14} /> {feedback}</p>}
@@ -1027,7 +1030,7 @@ function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePane
         <header><div><img src={hypeLogoWhite} alt="Hype" /><h2>{title}</h2></div><button aria-label="Fermer" onClick={onClose}><X size={18} /></button></header>
         {panel === 'achievements' && <div className="modal-content achievements-modal"><div className="achievement-dashboard"><article><span><Trophy size={17} /></span><div><small>Tous</small><strong>18</strong></div></article><article><span><Check size={17} /></span><div><small>Débloqués</small><strong>6</strong></div></article><article><span><Activity size={17} /></span><div><small>En cours</small><strong>4</strong></div></article><article><span><Gauge size={17} /></span><div><small>Progression</small><strong>33 %</strong></div></article></div><div className="achievement-catalog"><article className="achievement-entry unlocked"><span><Heart size={18} /></span><div className="achievement-copy"><b>Premier crush</b><small>Créer votre première vraie connexion</small></div><em>68,2 %</em><Check size={17} /></article><article className="achievement-entry progress"><span><UserPlus size={18} /></span><div className="achievement-copy"><b>Ça commence à prendre</b><small>Atteindre 1 000 abonnés</small><div className="achievement-item-progress"><i><em style={{ width: '62%' }} /></i><strong>620 / 1 000</strong></div></div><em>24,1 %</em><span className="achievement-percent">62 %</span></article><article className="achievement-entry locked"><span><Globe2 size={18} /></span><div className="achievement-copy"><b>Tout le monde en parle</b><small>Lancer une tendance mondiale</small></div><em>1,7 %</em><span className="achievement-lock">?</span></article></div></div>}
         {panel === 'friends' && <div className="modal-content friends-modal"><p className="modal-intro">Les amis qui façonnent actuellement leur histoire dans Hype.</p>{friends.filter((friend) => friend.game === 'Joue à Hype').map((friend) => <article key={friend.name}><span className="mock-friend-avatar" style={{ background: friend.color }}>{friend.initials}</span><div><b>{friend.name}</b><small>En ligne · Monde « Après minuit »</small></div><span className="friend-playing"><i /> En jeu</span></article>)}</div>}
-        {panel === 'news' && <div className="modal-content hype-news-modal"><article><span>VERSION 0.16</span><h3>Une identité à nous</h3><p>Hype adopte sa nouvelle identité visuelle et affine la façon dont vos relations évoluent dans chaque monde.</p><small>15 OCTOBRE</small></article><article><span>JOURNAL DE DÉVELOPPEMENT</span><h3>Des personnages qui se souviennent</h3><p>Les conversations, les rencontres et vos publications laissent désormais une trace plus naturelle dans votre histoire.</p><small>08 OCTOBRE</small></article></div>}
+        {panel === 'news' && <div className="modal-content hype-news-modal"><article><span>VERSION 0.26.0</span><h3>Une identité à nous</h3><p>Hype adopte sa nouvelle identité visuelle et affine la façon dont vos relations évoluent dans chaque monde.</p><small>15 OCTOBRE</small></article><article><span>JOURNAL DE DÉVELOPPEMENT</span><h3>Des personnages qui se souviennent</h3><p>Les conversations, les rencontres et vos publications laissent désormais une trace plus naturelle dans votre histoire.</p><small>08 OCTOBRE</small></article></div>}
         {panel === 'options' && <div className="hype-options-layout"><nav><button className={optionsSection === 'general' ? 'active' : ''} onClick={() => setOptionsSection('general')}><Settings size={16} /><span><b>Général</b><small>Expérience de jeu</small></span></button><button className={optionsSection === 'installation' ? 'active' : ''} onClick={() => setOptionsSection('installation')}><HardDrive size={16} /><span><b>Installation</b><small>Version et fichiers</small></span></button></nav><div className="hype-options-content">{optionsSection === 'general' ? <div className="modal-content options-modal"><div className="option-block"><span><b>Notifications sociales</b><small>Afficher les nouveaux messages, réactions et abonnements.</small></span><button aria-label="Notifications sociales" aria-pressed={settings.notifications} className={settings.notifications ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, notifications: !settings.notifications })}><i /></button></div><div className="option-block"><span><b>Animations de l’interface</b><small>Conserver les transitions et réactions du fil.</small></span><button aria-label="Animations de l’interface" aria-pressed={settings.animations} className={settings.animations ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, animations: !settings.animations })}><i /></button></div><div className="option-block"><span><b>Thèmes sensibles</b><small>Autoriser les personnages à aborder des sujets plus matures.</small></span><button aria-label="Thèmes sensibles" aria-pressed={settings.matureTopics} className={settings.matureTopics ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, matureTopics: !settings.matureTopics })}><i /></button></div><button className="modal-save" onClick={onClose}>Enregistrer les options</button></div> : <HypeInstallationPanel {...installationActions} />}</div></div>}
       </section>
     </div>,
@@ -1035,7 +1038,7 @@ function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePane
   );
 }
 
-function HypePage({ installState, installReport, progress, hypeRunning, installHype, launchHype, stopHype, onVerify, onReveal, onForget, onUninstall }: Pick<DownloadControls, 'installState' | 'installReport' | 'progress' | 'hypeRunning' | 'installHype' | 'launchHype' | 'stopHype'> & Pick<HypeInstallationActions, 'onVerify' | 'onReveal' | 'onForget' | 'onUninstall'>) {
+function HypePage({ installState, installReport, progress, hypeRunning, installHype, launchHype, stopHype, onVerify, onUpdate, onRepair, onReveal, onForget, onUninstall }: Pick<DownloadControls, 'installState' | 'installReport' | 'progress' | 'hypeRunning' | 'installHype' | 'launchHype' | 'stopHype'> & Pick<HypeInstallationActions, 'onVerify' | 'onUpdate' | 'onRepair' | 'onReveal' | 'onForget' | 'onUninstall'>) {
   const [launching, setLaunching] = useState(false);
   const [openPanel, setOpenPanel] = useState<GamePanel | null>(null);
   const needsRepair = installState === 'installed' && Boolean(installReport && (!installReport.executableFound || installReport.missingFiles.length || installReport.invalidFiles.length));
@@ -1074,7 +1077,7 @@ function HypePage({ installState, installReport, progress, hypeRunning, installH
           <p>Crée ton perso, choisis un monde et poste. Tout le monde est une IA sauf toi : on te répond, on s’abonne, on s’attache… ou on te cancel.</p>
           <div className="game-actions">
             <button className={`primary-play large ${hypeRunning ? 'stop-game' : ''}`} onClick={handlePrimaryAction}>{hypeRunning ? <X size={19} /> : needsRepair ? <Wrench size={19} /> : installState === 'installed' ? <Play size={19} fill="currentColor" /> : <Download size={19} />}{installLabel}</button>
-            <div className="hype-version"><span>VERSION ACTUELLE</span><b>0.16</b></div>
+            <div className="hype-version"><span>VERSION ACTUELLE</span><b>{installReport?.version || '0.26.0'}</b></div>
           </div>
           {installState === 'downloading' && <div className="download-progress hype-download-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{progress} % · Téléchargement en cours</small></div>}
         </>}
@@ -1091,7 +1094,7 @@ function HypePage({ installState, installReport, progress, hypeRunning, installH
             <GameMetric icon={<Gamepad2 />} value="Solo" label="Ton histoire" />
             <GameMetric icon={<Sparkles />} value="100 % IA" label="Personnages" />
             <GameMetric icon={<Globe2 />} value="Multiples" label="Mondes" />
-            <GameMetric icon={<ShieldCheck />} value="0.16" label="Version actuelle" />
+            <GameMetric icon={<ShieldCheck />} value={installReport?.version || '0.26.0'} label="Version actuelle" />
           </div>
           <div className="section-heading"><div><h2>À toi de créer le buzz.</h2></div><span className="muted">Chaque monde réagit à tes choix</span></div>
           <section className="hype-loop-grid">
@@ -1103,12 +1106,12 @@ function HypePage({ installState, installReport, progress, hypeRunning, installH
         </div>
         <aside className="game-side-column hype-side-column">
           <div className="hype-profile-card"><img src={hypeAvatar} alt="Icône Hype" /><span><b>Ton prochain toi.</b><small>Un profil. Une histoire. Aucun script.</small></span><div><strong>12 480</strong><small>abonnés potentiels</small></div></div>
-          <div className="info-card"><h3>À propos</h3><p>Un petit jeu fun de simulation de réseau social, peuplé de personnages gérés par IA. Faites des rencontres, créez du contenu et voyez jusqu’où votre histoire peut aller.</p><div><span>Développeur</span><b>Æ Games</b></div><div><span>Genre</span><b>Simulation sociale</b></div><div><span>Expérience</span><b>Solo · IA générative</b></div><div><span>Version</span><b>0.16</b></div></div>
+          <div className="info-card"><h3>À propos</h3><p>Un petit jeu fun de simulation de réseau social, peuplé de personnages gérés par IA. Faites des rencontres, créez du contenu et voyez jusqu’où votre histoire peut aller.</p><div><span>Développeur</span><b>Æ Games</b></div><div><span>Genre</span><b>Simulation sociale</b></div><div><span>Expérience</span><b>Solo · IA générative</b></div><div><span>Version</span><b>{installReport?.version || '0.26.0'}</b></div></div>
         </aside>
       </section>
       <GameDock label={installLabel} icon={hypeRunning ? <X size={19} /> : needsRepair ? <Wrench size={19} /> : installState === 'installed' ? <Play size={19} fill="currentColor" /> : <Download size={19} />} onPrimary={handlePrimaryAction} onPanel={setOpenPanel} showNews friendCount={1} primaryDanger={hypeRunning} />
       {launching && <LaunchSequence game="Hype" artwork={hypeAvatar} />}
-      {openPanel && <HypeModal panel={openPanel} onClose={() => setOpenPanel(null)} installState={installState} installReport={installReport} hypeRunning={hypeRunning} onInstall={installHype} onVerify={onVerify} onReveal={onReveal} onForget={onForget} onUninstall={onUninstall} />}
+      {openPanel && <HypeModal panel={openPanel} onClose={() => setOpenPanel(null)} installState={installState} installReport={installReport} hypeRunning={hypeRunning} onInstall={installHype} onVerify={onVerify} onUpdate={onUpdate} onRepair={onRepair} onReveal={onReveal} onForget={onForget} onUninstall={onUninstall} />}
     </main>
   );
 }
@@ -1251,7 +1254,7 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [page, setPage] = useState<Page>('accueil');
   const [installState, setInstallState] = useState<InstallState>('available');
   const [progress, setProgress] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [downloadInfo, setDownloadInfo] = useState<HypeDownloadProgress | null>(null);
   const [installerOpen, setInstallerOpen] = useState(false);
   const [installerBusy, setInstallerBusy] = useState(false);
   const [installerError, setInstallerError] = useState('');
@@ -1268,19 +1271,6 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
       document.documentElement.style.removeProperty('--launcher-ui-scale');
     };
   }, [effectiveScale]);
-
-  useEffect(() => {
-    if (installState !== 'downloading' || paused) return;
-    const timer = window.setInterval(() => setProgress((current) => {
-      if (current >= 100) {
-        window.clearInterval(timer);
-        setInstallState('installed');
-        return 100;
-      }
-      return Math.min(100, current + 1);
-    }), 180);
-    return () => window.clearInterval(timer);
-  }, [installState, paused]);
 
   useEffect(() => {
     if (!hypePath || launcherAdapter.environment !== 'desktop') return;
@@ -1325,6 +1315,35 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     setInstallerError('');
     setInstallerOpen(true);
   };
+  const downloadHype = async (path: string) => {
+    setInstallerOpen(false);
+    setInstallState('downloading');
+    setProgress(0);
+    setDownloadInfo(null);
+    try {
+      const report = await launcherAdapter.installHype(path, (info) => {
+        setDownloadInfo(info);
+        setProgress(info.percentage);
+      });
+      setInstallReport(report);
+      setHypePath(report.path);
+      localStorage.setItem('ae-hype-install-path', report.path);
+      setInstallState('installed');
+      setProgress(100);
+      return report;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setInstallState('available');
+      setProgress(0);
+      setDownloadInfo(null);
+      if (!message.toLowerCase().includes('annul')) {
+        setInstallerError(message);
+        setInstallReport(null);
+        setInstallerOpen(true);
+      }
+      throw error;
+    }
+  };
   const chooseInstallation = async () => {
     setInstallerBusy(true);
     setInstallerError('');
@@ -1338,8 +1357,7 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
         setInstallState('installed');
         setProgress(100);
       } else {
-        setInstallState('available');
-        setProgress(0);
+        await downloadHype(report.path);
       }
     } catch (error) {
       setInstallerError(error instanceof Error ? error.message : String(error));
@@ -1382,6 +1400,20 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     setProgress(100);
     return report;
   };
+  const updateHype = async () => {
+    if (!hypePath) throw new Error('Aucune installation de Hype n’est liée au launcher.');
+    if (hypeRunning) throw new Error('Fermez Hype avant de rechercher ou installer une mise à jour.');
+    const release = await launcherAdapter.checkHypeUpdate(hypePath);
+    if (!release.updateAvailable) return `Hype ${release.version} est déjà à jour.`;
+    await downloadHype(hypePath);
+    return `Hype ${release.version} a été installé avec succès.`;
+  };
+  const repairHype = async () => {
+    if (!hypePath) throw new Error('Aucune installation de Hype n’est liée au launcher.');
+    if (hypeRunning) throw new Error('Fermez Hype avant de réparer son installation.');
+    const report = await downloadHype(hypePath);
+    return `Hype${report.version ? ` ${report.version}` : ''} a été réparé et vérifié.`;
+  };
   const revealHype = async () => {
     if (!hypePath) throw new Error('Aucune installation de Hype n’est liée au launcher.');
     await launcherAdapter.revealHypeInstallation(hypePath);
@@ -1392,7 +1424,7 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     setInstallReport(null);
     setInstallState('available');
     setProgress(0);
-    setPaused(false);
+    setDownloadInfo(null);
   };
   const uninstallHype = async () => {
     if (!hypePath) throw new Error('Aucune installation de Hype n’est liée au launcher.');
@@ -1410,11 +1442,7 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     }
   };
   const verifyLauncher = () => launcherAdapter.verifyLauncherInstallation();
-  const cancelDownload = () => {
-    setInstallState('available');
-    setProgress(0);
-    setPaused(false);
-  };
+  const cancelDownload = () => { void launcherAdapter.cancelHypeDownload(); };
   const pageTitle = page === 'accueil' ? 'Accueil' : page === 'bibliotheque' ? 'Bibliothèque' : page === 'telechargements' ? 'Téléchargements' : page === 'reglages' ? 'Réglages' : page === 'laliferp' ? 'L.A LifeRP' : 'Hype';
   return (
     <div className={`launcher-shell theme-${page} ${settings.compactMode ? 'ui-compact' : ''} ${settings.reducedMotion ? 'ui-reduced-motion' : ''} ${settings.highContrast ? 'ui-high-contrast' : ''}`} style={{ '--ui-scale': effectiveScale } as React.CSSProperties}>
@@ -1424,12 +1452,12 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
         <div className="workspace-scroll" key={page}>
           {page === 'accueil' && <HomePage setPage={setPage} />}
           {page === 'bibliotheque' && <LibraryPage setPage={setPage} installState={installState} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} />}
-          {page === 'telechargements' && <DownloadsPage installState={installState} installReport={installReport} progress={progress} paused={paused} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} togglePause={() => setPaused((value) => !value)} cancelDownload={cancelDownload} />}
+          {page === 'telechargements' && <DownloadsPage installState={installState} installReport={installReport} progress={progress} downloadInfo={downloadInfo} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} cancelDownload={cancelDownload} />}
           {page === 'reglages' && <SettingsPage settings={settings} updateSettings={updateSettings} effectiveScale={effectiveScale} onChooseInstall={chooseDefaultInstallDirectory} onVerifyLauncher={verifyLauncher} onReset={() => setSettings(defaultLauncherSettings)} />}
           {page === 'laliferp' && <LifeRpPage />}
-          {page === 'hype' && <HypePage installState={installState} installReport={installReport} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} onVerify={verifyHype} onReveal={revealHype} onForget={forgetHype} onUninstall={uninstallHype} />}
+          {page === 'hype' && <HypePage installState={installState} installReport={installReport} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} onVerify={verifyHype} onUpdate={updateHype} onRepair={repairHype} onReveal={revealHype} onForget={forgetHype} onUninstall={uninstallHype} />}
         </div>
-        {installState === 'downloading' && page !== 'telechargements' && <button className="download-capsule" onClick={() => setPage('telechargements')}><span className="capsule-ring" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties}><Download size={14} /></span><span><b>Hype · {progress} %</b><small>{paused ? 'Téléchargement en pause' : '42 Mo/s · Voir le transfert'}</small></span><ChevronRight size={16} /></button>}
+        {installState === 'downloading' && page !== 'telechargements' && <button className="download-capsule" onClick={() => setPage('telechargements')}><span className="capsule-ring" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties}><Download size={14} /></span><span><b>Hype · {progress} %</b><small>Installation depuis GitHub · Voir le transfert</small></span><ChevronRight size={16} /></button>}
       </section>
       {installerOpen && <HypeInstallModal report={installReport} busy={installerBusy} error={installerError} onChoose={() => void chooseInstallation()} onClose={() => setInstallerOpen(false)} />}
     </div>

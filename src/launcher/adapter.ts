@@ -46,6 +46,20 @@ export type LauncherUpdateInfo = {
   notes?: string;
 };
 
+export type HypeReleaseInfo = {
+  version: string;
+  downloadSize: number;
+  installedSize: number;
+  updateAvailable: boolean;
+};
+
+export type HypeDownloadProgress = {
+  percentage: number;
+  phase: 'download' | 'verify' | 'extract' | 'complete';
+  downloaded: number;
+  total: number;
+};
+
 function isHypeManifest(manifest: HypeManifest) {
   const game = typeof manifest.game === 'string'
     ? manifest.game
@@ -166,6 +180,27 @@ export const launcherAdapter = {
   async verifyHypeInstallation(path: string): Promise<HypeInstallReport> {
     if (!isTauri()) throw new Error("La revérification automatique nécessite l’application desktop Æ Games.");
     return invoke<HypeInstallReport>('verify_hype_installation', { path });
+  },
+
+  async checkHypeUpdate(path?: string): Promise<HypeReleaseInfo> {
+    if (!isTauri()) throw new Error("La recherche de mises à jour de Hype nécessite l’application desktop Æ Games.");
+    return invoke<HypeReleaseInfo>('check_hype_update', { path: path || null });
+  },
+
+  async installHype(path: string, onProgress: (progress: HypeDownloadProgress) => void): Promise<HypeInstallReport> {
+    if (!isTauri()) throw new Error("L’installation de Hype nécessite l’application desktop Æ Games.");
+    const { listen } = await import('@tauri-apps/api/event');
+    const unlisten = await listen<HypeDownloadProgress>('hype-download-progress', (event) => onProgress(event.payload));
+    try {
+      return await invoke<HypeInstallReport>('install_hype', { path });
+    } finally {
+      unlisten();
+    }
+  },
+
+  async cancelHypeDownload(): Promise<void> {
+    if (!isTauri()) return;
+    await invoke('cancel_hype_download');
   },
 
   async launchHype(path: string): Promise<void> {
