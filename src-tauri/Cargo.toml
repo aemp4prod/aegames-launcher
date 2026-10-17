@@ -1,6 +1,6 @@
 [package]
 name = "ae-games-launcher"
-version = "0.1.1"
+version = "0.1.2"
 description = "Æ Games Launcher"
 authors = ["Æ Games"]
 edition = "2021"

@@ -149,7 +149,10 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = File::open(path)
         .map_err(|error| format!("Impossible de lire {} : {error}", path.display()))?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
+    // Keep the large hashing buffer on the heap. A 1 MiB stack allocation can
+    // overflow the Windows main thread while Tauri handles a synchronous
+    // installation check during startup.
+    let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
         let read = file
             .read(&mut buffer)
@@ -845,4 +848,29 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Æ Games Launcher");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sha256_uses_a_small_thread_stack_safely() {
+        let path =
+            std::env::temp_dir().join(format!("ae-games-sha-test-{}.bin", std::process::id()));
+        fs::write(&path, b"abc").expect("create hash fixture");
+        let test_path = path.clone();
+        let hash = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(move || sha256_file(&test_path))
+            .expect("spawn constrained stack thread")
+            .join()
+            .expect("hash thread must not overflow")
+            .expect("hash fixture");
+        let _ = fs::remove_file(path);
+        assert_eq!(
+            hash,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 }
