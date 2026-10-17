@@ -53,6 +53,16 @@ export type HypeReleaseInfo = {
   updateAvailable: boolean;
 };
 
+export type HypeReleaseNews = {
+  id: number;
+  name: string;
+  tagName: string;
+  publishedAt: string;
+  body: string;
+  htmlUrl: string;
+  prerelease: boolean;
+};
+
 export type HypeDownloadProgress = {
   percentage: number;
   phase: 'download' | 'verify' | 'extract' | 'complete';
@@ -187,6 +197,24 @@ export const launcherAdapter = {
     return invoke<HypeReleaseInfo>('check_hype_update', { path: path || null });
   },
 
+  async getHypeReleases(): Promise<HypeReleaseNews[]> {
+    if (isTauri()) return invoke<HypeReleaseNews[]>('get_hype_releases');
+    const response = await fetch('https://api.github.com/repos/aemp4prod/aegames-hype/releases?per_page=6', {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!response.ok) throw new Error(`GitHub n’a pas pu charger les actualités Hype (${response.status}).`);
+    const releases = await response.json() as Array<{ id: number; name: string | null; tag_name: string; published_at: string; body: string | null; html_url: string; prerelease: boolean; draft: boolean }>;
+    return releases.filter((release) => !release.draft).map((release) => ({
+      id: release.id,
+      name: release.name?.trim() || release.tag_name,
+      tagName: release.tag_name,
+      publishedAt: release.published_at,
+      body: release.body || '',
+      htmlUrl: release.html_url,
+      prerelease: release.prerelease,
+    }));
+  },
+
   async installHype(path: string, onProgress: (progress: HypeDownloadProgress) => void): Promise<HypeInstallReport> {
     if (!isTauri()) throw new Error("L’installation de Hype nécessite l’application desktop Æ Games.");
     const { listen } = await import('@tauri-apps/api/event');
@@ -221,6 +249,11 @@ export const launcherAdapter = {
   async revealHypeInstallation(path: string): Promise<void> {
     if (!isTauri()) throw new Error("L’ouverture du dossier nécessite l’application desktop Æ Games.");
     await invoke('reveal_hype_installation', { path });
+  },
+
+  async moveHypeInstallation(path: string): Promise<HypeInstallReport | null> {
+    if (!isTauri()) throw new Error("Le déplacement de Hype nécessite l’application desktop Æ Games.");
+    return invoke<HypeInstallReport | null>('move_hype_installation', { path });
   },
 
   async uninstallHype(path: string): Promise<void> {

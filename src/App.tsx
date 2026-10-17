@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import type { Session, User } from '@supabase/supabase-js';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
-import { launcherAdapter, type HypeDownloadProgress, type HypeInstallReport } from './launcher/adapter';
+import { LogicalSize } from '@tauri-apps/api/dpi';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { launcherAdapter, type HypeDownloadProgress, type HypeInstallReport, type HypeReleaseNews } from './launcher/adapter';
 import { GamePageHero } from './components/GamePage';
 import { isUsernameAvailable, listenForAuthCallbacks, loadProfile, normalizeUsername, profileFromUser, saveProfile as saveProfileRecord, signInWithDiscord, validateUsername, type PresenceStatus, type ProfileData } from './lib/auth';
 import { loadRelationships, removeFriend, respondToFriendRequest, searchProfiles, sendFriendRequest, type FriendProfile } from './lib/friends';
@@ -12,6 +14,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  ArrowUpDown,
   Bell,
   Check,
   ChevronDown,
@@ -30,11 +33,13 @@ import {
   Library,
   LayoutGrid,
   Lock,
+  List,
   Maximize2,
   MessageCircle,
   Minus,
   Monitor,
   MoreHorizontal,
+  MoveRight,
   Newspaper,
   Play,
   RefreshCw,
@@ -106,11 +111,27 @@ const defaultLauncherSettings: LauncherSettings = {
   shareGameActivity: true, discordPresence: true, shareOnlineStatus: true, crashReports: false, releaseChannel: 'stable',
 };
 
+const MIN_INTERFACE_WIDTH = 1180;
+const MIN_INTERFACE_HEIGHT = 700;
+
+function getAutomaticInterfaceScale() {
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const physicalWidth = window.screen.width * devicePixelRatio;
+  const physicalHeight = window.screen.height * devicePixelRatio;
+
+  if (physicalWidth >= 3800 && physicalHeight >= 2100) return 1.5;
+  if (physicalWidth >= 3000) return 1.28;
+  if (physicalWidth >= 2200) return 1.16;
+  return 1;
+}
+
 function loadLauncherSettings(): LauncherSettings {
   try {
     const saved = JSON.parse(localStorage.getItem('ae-launcher-settings') || '{}') as Partial<LauncherSettings>;
     const legacyScale = Number(localStorage.getItem('ae-ui-scale'));
-    return { ...defaultLauncherSettings, ...saved, ...(legacyScale >= .8 && legacyScale <= 1.5 ? { scaleMode: 'custom' as const, uiScale: Math.round(legacyScale * 100) } : {}) };
+    const settings = { ...defaultLauncherSettings, ...saved };
+    const migratedScale = legacyScale >= .8 && legacyScale <= 2 ? Math.round(legacyScale * 100) : settings.uiScale;
+    return { ...settings, uiScale: Math.min(200, Math.max(80, Number(migratedScale) || 100)), ...(legacyScale >= .8 && legacyScale <= 2 ? { scaleMode: 'custom' as const } : {}) };
   } catch { return defaultLauncherSettings; }
 }
 
@@ -143,8 +164,8 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
       <img src="/assets/ae-mark.png" alt="" />
       {!compact && (
         <div>
-          <strong>Æ GAMES</strong>
-          <span>LAUNCHER</span>
+          <strong>Æ Games</strong>
+          <span>Créateurs d’expériences</span>
         </div>
       )}
     </div>
@@ -270,6 +291,7 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
       await saveProfileRecord(user, nextProfile);
       setProfile(nextProfile);
       setDraft(nextProfile);
+      window.dispatchEvent(new CustomEvent<ProfileData>('ae-profile-updated', { detail: nextProfile }));
       setEditing(false);
       setMediaError('');
     } catch (error) {
@@ -296,20 +318,19 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand"><BrandMark /><span className="signal-status"><i /> LIVE</span></div>
+      <div className="sidebar-brand"><BrandMark /></div>
       <nav className="main-nav" aria-label="Navigation principale">
         <button className={page === 'accueil' ? 'active' : ''} onClick={() => setPage('accueil')}><Home size={18} /> Accueil</button>
         <button className={page === 'bibliotheque' ? 'active' : ''} onClick={() => setPage('bibliotheque')}><Library size={18} /> Bibliothèque <span className="count">2</span></button>
       </nav>
       <div className="game-groups game-rail">
-        <p className="rail-label">VOS MONDES</p>
-        <div className="group-title"><span>FIVEM</span><ChevronDown size={14} /></div>
-        <button className={`game-link ${page === 'laliferp' ? 'active' : ''}`} onClick={() => setPage('laliferp')}>
-          <img src="/assets/laliferp-cover.png" alt="" /><span><b>L.A LifeRP</b><small><i className="online-dot" /> 312 en ligne</small></span><i className="rail-signal" />
-        </button>
         <div className="group-title"><span>Æ ORIGINALS</span><ChevronDown size={14} /></div>
         <button className={`game-link ${page === 'hype' ? 'active' : ''}`} onClick={() => setPage('hype')}>
           <img src={hypeIcon} alt="" /><span><b>Hype</b><small className={hypeRunning ? 'game-running-label' : ''}>{hypeRunning && <i className="online-dot" />}{hypeRunning ? 'En jeu' : installState === 'downloading' ? `${progress} %` : installState === 'installed' ? 'Prêt à jouer' : 'Non installé'}</small></span><i className="rail-signal" />
+        </button>
+        <div className="group-title"><span>FIVEM</span><ChevronDown size={14} /></div>
+        <button className={`game-link ${page === 'laliferp' ? 'active' : ''}`} onClick={() => setPage('laliferp')}>
+          <img src="/assets/laliferp-cover.png" alt="" /><span><b>L.A LifeRP</b><small><i className="online-dot" /> 312 en ligne</small></span><i className="rail-signal" />
         </button>
       </div>
       <div className="sidebar-spacer" />
@@ -353,7 +374,7 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
   );
 }
 
-function Topbar({ title, setPage }: { title: string; setPage: (page: Page) => void }) {
+function Topbar({ setPage }: { setPage: (page: Page) => void }) {
   const topbarRef = useRef<HTMLElement>(null);
   const [openPanel, setOpenPanel] = useState<'friends' | 'notifications' | null>(null);
   const [query, setQuery] = useState('');
@@ -483,18 +504,20 @@ function Topbar({ title, setPage }: { title: string; setPage: (page: Page) => vo
     setQuery('');
     setSearchOpen(false);
   };
+  const minimizeWindow = () => { if (launcherAdapter.environment === 'desktop') void getCurrentWindow().minimize(); };
+  const toggleMaximizeWindow = () => { if (launcherAdapter.environment === 'desktop') void getCurrentWindow().toggleMaximize(); };
+  const closeWindow = () => { if (launcherAdapter.environment === 'desktop') void getCurrentWindow().close(); };
 
   return (
     <>
-    <header className="topbar" ref={topbarRef}>
-      <div className="topbar-context"><span className="topbar-title">{title}</span></div>
+    <header className="topbar" ref={topbarRef} data-tauri-drag-region>
       <div className="search-shell">
         <label className={`search ${searchOpen ? 'active' : ''}`}><Search size={17} /><input aria-label="Rechercher" placeholder="Rechercher un jeu, un ami…" value={query} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} onFocus={() => { window.dispatchEvent(new Event('close-profile-menu')); setSearchOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' && results[0]) selectResult(results[0]); if (event.key === 'Escape') setSearchOpen(false); }} /><kbd>⌘ K</kbd></label>
         {searchOpen && query && <div className="search-results">{results.length ? results.map((item) => <button key={`${item.type}-${item.label}`} onClick={() => selectResult(item)}><span className={`search-result-icon ${item.art ? 'has-art' : ''}`}>{item.art ? <img src={item.art} alt="" /> : <Library size={16} />}</span><span><b>{item.label}</b><small>{item.detail}</small></span><em>{item.type}</em></button>) : <p>Aucun résultat pour « {query} »</p>}</div>}
       </div>
       <div className="topbar-menu-wrap">
         <button className={`party-peek ${openPanel === 'friends' ? 'active' : ''}`} aria-label="Voir les amis en ligne" aria-expanded={openPanel === 'friends'} onClick={() => { window.dispatchEvent(new Event('close-profile-menu')); setOpenPanel(openPanel === 'friends' ? null : 'friends'); setSearchOpen(false); if (openPanel !== 'friends') void refreshRelationships(); }}>
-          <span className="party-avatars">{onlineFriends.slice(0, 3).map((friend) => <i key={friend.userId} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 1).toUpperCase()}</i>)}</span>
+          {onlineFriends.length > 0 && <span className="party-avatars">{onlineFriends.slice(0, 3).map((friend) => <i key={friend.userId} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 1).toUpperCase()}</i>)}</span>}
           <span><b>{onlineFriends.length} ami{onlineFriends.length === 1 ? '' : 's'}</b><small>en ligne</small></span>
         </button>
         {openPanel === 'friends' && <div className="topbar-drawer friends-drawer"><div className="drawer-heading"><div><h3>Amis en ligne</h3><span>{onlineFriends.length} sur {acceptedFriends.length}</span></div><button aria-label="Ajouter un ami" onClick={() => openFriendDialog('search')}>+</button></div>{onlineFriends.length ? onlineFriends.slice(0, 5).map((friend) => <div className="drawer-friend" key={friend.userId}><span className={`friend-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}<i /></span><span><b>{friend.displayName}</b><small>@{friend.username}</small></span></div>) : <p className="drawer-empty">Aucun ami en ligne pour le moment.</p>}{incomingRequests.length > 0 && <button className="drawer-requests" onClick={() => openFriendDialog('list')}>{incomingRequests.length} demande{incomingRequests.length > 1 ? 's' : ''} en attente</button>}{friendError && <p className="drawer-feedback">{friendError}</p>}<button className="drawer-footer" onClick={() => openFriendDialog('list')}>Voir mes amis <ChevronRight size={14} /></button></div>}
@@ -503,7 +526,7 @@ function Topbar({ title, setPage }: { title: string; setPage: (page: Page) => vo
         <button className={`icon-button ${openPanel === 'notifications' ? 'active' : ''}`} aria-label="Notifications" aria-expanded={openPanel === 'notifications'} onClick={() => { window.dispatchEvent(new Event('close-profile-menu')); setOpenPanel(openPanel === 'notifications' ? null : 'notifications'); setSearchOpen(false); }}><Bell size={18} />{hasUnread && <i />}</button>
         {openPanel === 'notifications' && <div className="topbar-drawer notifications-drawer"><div className="drawer-heading"><div><h3>Notifications</h3><span>{hasUnread ? '3 nouvelles' : 'À jour'}</span></div>{hasUnread && <button onClick={() => setHasUnread(false)}>Tout lire</button>}</div><button className="notification-item"><span className="notification-symbol achievement"><Trophy size={16} /></span><span><b>Succès déverrouillé</b><small>« Première nuit » · L.A LifeRP</small></span><em>2 h</em></button><button className="notification-item"><span className="notification-symbol update"><Download size={16} /></span><span><b>Hype est disponible</b><small>Version 0.26.0 · environ 345 Mo</small></span><em>4 h</em></button><button className="notification-item"><span className="notification-symbol social"><Users size={16} /></span><span><b>Nox vous invite</b><small>Rejoindre sa partie de Hype</small></span><em>5 h</em></button></div>}
       </div>
-      <div className="window-buttons" aria-hidden="true"><button><Minus size={15} /></button><button><Maximize2 size={13} /></button><button><X size={15} /></button></div>
+      <div className="window-buttons"><button aria-label="Réduire" onClick={minimizeWindow}><Minus size={15} /></button><button aria-label="Agrandir ou restaurer" onClick={toggleMaximizeWindow}><Maximize2 size={13} /></button><button aria-label="Fermer" onClick={closeWindow}><X size={15} /></button></div>
     </header>
     {friendDialog && createPortal(<div className="friend-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFriendDialog(null); }}><section className={`friend-dialog ${friendDialog === 'list' ? 'friend-dialog-large' : ''}`} role="dialog" aria-modal="true" aria-label={friendDialog === 'search' ? 'Ajouter un ami' : 'Mes amis'} onClick={() => setFriendMenuId(null)}><header><div><span>RÉSEAU Æ GAMES</span><h2>{friendDialog === 'search' ? 'Ajouter un ami' : 'Mes amis'}</h2></div><button aria-label="Fermer" onClick={() => setFriendDialog(null)}><X size={18} /></button></header>{friendDialog === 'search' ? <div className="friend-search-content"><label><Search size={17} /><input autoFocus value={friendQuery} onChange={(event) => setFriendQuery(event.target.value)} placeholder="Nom d’affichage ou @pseudo" /></label><p className="friend-search-hint">Saisissez au moins deux caractères.</p><div className="friend-search-results">{friendLoading && <p className="friend-dialog-empty">Recherche en cours…</p>}{!friendLoading && friendQuery.trim().length >= 2 && !friendResults.length && !friendError && <p className="friend-dialog-empty">Aucun joueur trouvé.</p>}{friendResults.map((friend) => <article key={friend.userId}><span className={`friend-list-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}</span><div><b>{friend.displayName}</b><small>@{friend.username}</small></div>{friend.relationshipStatus === 'accepted' ? <button disabled><Check size={14} /> Ami</button> : friend.direction === 'outgoing' ? <button disabled>Demande envoyée</button> : <button disabled={friendBusyId === friend.userId} onClick={() => void requestFriend(friend)}><UserPlus size={14} />{friend.direction === 'incoming' ? 'Accepter' : 'Ajouter'}</button>}</article>)}</div>{friendError && <p className="friend-dialog-error">{friendError}</p>}</div> : <div className="friend-list-content">{incomingRequests.length > 0 && <section className="friend-request-section"><div className="friend-section-title"><h3>Demandes reçues</h3><span>{incomingRequests.length}</span></div>{incomingRequests.map((friend) => <article key={friend.userId}><span className={`friend-list-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}</span><div><b>{friend.displayName}</b><small>@{friend.username}</small></div><div className="friend-request-actions"><button disabled={friendBusyId === friend.userId} onClick={() => void respondToRequest(friend, false)}>Refuser</button><button className="accept" disabled={friendBusyId === friend.userId} onClick={() => void respondToRequest(friend, true)}>Accepter</button></div></article>)}</section>}<section><div className="friend-section-title"><h3>Liste d’amis</h3><span>{acceptedFriends.length}</span></div>{acceptedFriends.length ? acceptedFriends.map((friend) => <article key={friend.userId}><span className={`friend-list-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}<i className={`status-${friend.presenceStatus}`} /></span><div><b>{friend.displayName}</b><small>@{friend.username} · {friend.presenceStatus === 'online' ? 'En ligne' : friend.presenceStatus === 'busy' ? 'Occupé' : 'Hors ligne'}</small></div><div className="friend-row-menu"><button aria-label={`Actions pour ${friend.displayName}`} onClick={(event) => { event.stopPropagation(); setFriendMenuId(friendMenuId === friend.userId ? null : friend.userId); }}><MoreHorizontal size={18} /></button>{friendMenuId === friend.userId && <div onClick={(event) => event.stopPropagation()}><button disabled={friendBusyId === friend.userId} onClick={() => void deleteFriend(friend)}><Trash2 size={14} /> Supprimer des amis</button></div>}</div></article>) : <p className="friend-dialog-empty">Votre liste d’amis est encore vide.</p>}</section>{friendError && <p className="friend-dialog-error">{friendError}</p>}</div>}</section></div>, document.body)}
     </>
@@ -514,11 +537,19 @@ function Stat({ icon, label, value, detail }: { icon: React.ReactNode; label: st
   return <div className="stat-card"><span className="stat-icon">{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></div>;
 }
 
-function HomePage({ setPage }: { setPage: (page: Page) => void }) {
+function HomePage({ setPage, user }: { setPage: (page: Page) => void; user: User }) {
+  const [displayName, setDisplayName] = useState(() => profileFromUser(user).name);
+  useEffect(() => {
+    let active = true;
+    const handleProfileUpdate = (event: Event) => setDisplayName((event as CustomEvent<ProfileData>).detail.name);
+    window.addEventListener('ae-profile-updated', handleProfileUpdate);
+    void loadProfile(user).then((profile) => { if (active) setDisplayName(profile.name); }).catch(() => undefined);
+    return () => { active = false; window.removeEventListener('ae-profile-updated', handleProfileUpdate); };
+  }, [user]);
   return (
     <div className="page-with-friends">
       <main className="page-content home-page">
-        <section className="welcome-row"><div><h1>Bonsoir, Alex.</h1><p>On reprend là où vous vous êtes arrêté ?</p></div><div className="level-card"><span>NIV. 18</span><div><b>Explorateur</b><small>2 840 / 3 200 XP</small><i><em /></i></div><Trophy size={21} /></div></section>
+        <section className="welcome-row"><div><h1>Heureux de vous revoir {displayName}</h1><p>On reprend là où vous vous êtes arrêté ?</p></div><div className="level-card"><span>NIV. 18</span><div><b>Explorateur</b><small>2 840 / 3 200 XP</small><i><em /></i></div><Trophy size={21} /></div></section>
         <section className="continue-card" onClick={() => setPage('laliferp')}>
           <img src="/assets/laliferp-hero.jpg" alt="Univers synthwave de L.A LifeRP" />
           <div className="continue-shade" />
@@ -546,7 +577,7 @@ function GameMetric({ icon, value, label }: { icon: React.ReactNode; value: stri
 }
 
 function HypeArtwork({ compact = false }: { compact?: boolean }) {
-  return <div className={`hype-key-art ${compact ? 'compact' : ''}`}><div className="hype-key-orbit" /><img src={hypeLogoWhite} alt="Hype" /><div className="hype-key-post post-one"><span className="generated-avatar avatar-pink">M</span><i><b>Maya</b><small>ta photo est incroyable ✨</small></i></div><div className="hype-key-post post-two"><Heart size={13} fill="currentColor" /><i><b>+248</b><small>réactions</small></i></div><span className="hype-key-dot" /></div>;
+  return <div className={`hype-banner-art ${compact ? 'compact' : ''}`} aria-label="Aperçu du réseau social Hype"><div className="hype-feed-preview"><div className="hype-feed-top"><img src={hypeAvatar} alt="" /><span><b>ton monde</b><small>pour toi</small></span><i>h.</i></div><article className="hype-post main-post"><div><span className="generated-avatar avatar-pink">M</span><p><b>Maya</b><small>@maya · 2 min</small></p></div><strong>ok mais ta dernière photo ??? on en parle ou pas</strong><footer><span><Heart size={13} fill="currentColor" /> 248</span><span><MessageCircle size={13} /> 34</span></footer></article><article className="hype-post reply-post"><div><span className="generated-avatar avatar-yellow">T</span><p><b>Théo</b><small>@theo · maintenant</small></p></div><strong>franchement, t’abuses 😭</strong></article><div className="hype-feed-alert"><UserPlus size={14} /><span><b>+3 nouveaux abonnés</b><small>depuis ton dernier post</small></span></div></div></div>;
 }
 
 type GamePanel = 'achievements' | 'friends' | 'options' | 'news';
@@ -746,11 +777,39 @@ function HypeInstallModal({ report, busy, error, onChoose, onClose }: {
   );
 }
 
-function LibraryPage({ setPage, installState, progress, hypeRunning, installHype, launchHype, stopHype }: { setPage: (page: Page) => void; installState: InstallState; progress: number; hypeRunning: boolean; installHype: () => void; launchHype: () => Promise<boolean>; stopHype: () => Promise<boolean> }) {
+type LibraryFilter = 'all' | 'installed' | 'updates';
+type LibraryView = 'list' | 'covers';
+
+function LibraryPage({ setPage, installState, installReport, hypePath, progress, hypeRunning, installHype, launchHype, stopHype }: { setPage: (page: Page) => void; installState: InstallState; installReport: HypeInstallReport | null; hypePath: string; progress: number; hypeRunning: boolean; installHype: () => void; launchHype: () => Promise<boolean>; stopHype: () => Promise<boolean> }) {
   const [selected, setSelected] = useState<'laliferp' | 'hype'>('laliferp');
   const [launchingGame, setLaunchingGame] = useState<'laliferp' | 'hype' | null>(null);
+  const [filter, setFilter] = useState<LibraryFilter>('all');
+  const [view, setView] = useState<LibraryView>('list');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [hypeUpdateAvailable, setHypeUpdateAvailable] = useState(false);
   const isLife = selected === 'laliferp';
+  const hypeNeedsAttention = Boolean(installReport && (installReport.missingFiles.length || installReport.invalidFiles.length));
+  const hypeNeedsUpdate = hypeUpdateAvailable || hypeNeedsAttention;
+  const showLife = filter !== 'updates';
+  const showHype = filter === 'all' || (filter === 'installed' && installState === 'installed') || (filter === 'updates' && hypeNeedsUpdate);
+  const installedCount = installState === 'installed' ? 2 : 1;
+  const updatesCount = hypeNeedsUpdate ? 1 : 0;
   const actionLabel = isLife ? 'Jouer maintenant' : hypeRunning ? 'Fermer' : installState === 'installed' ? 'Jouer' : installState === 'downloading' ? `${progress} % téléchargé` : 'Installer';
+
+  useEffect(() => {
+    if (installState !== 'installed' || !hypePath || launcherAdapter.environment !== 'desktop') {
+      setHypeUpdateAvailable(false);
+      return;
+    }
+    let active = true;
+    void launcherAdapter.checkHypeUpdate(hypePath).then((release) => { if (active) setHypeUpdateAvailable(release.updateAvailable); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [hypePath, installState]);
+
+  useEffect(() => {
+    if (selected === 'laliferp' && !showLife && showHype) setSelected('hype');
+    if (selected === 'hype' && !showHype && showLife) setSelected('laliferp');
+  }, [selected, showHype, showLife]);
   const runAction = async () => {
     if (isLife) {
       setLaunchingGame(selected);
@@ -797,21 +856,22 @@ function LibraryPage({ setPage, installState, progress, hypeRunning, installHype
       </section>
 
       <section className="collection-toolbar">
-        <div className="collection-tabs"><button className="active">Tous <span>2</span></button><button>Installés <span>{installState === 'installed' ? 2 : 1}</span></button><button>À mettre à jour</button><button>Favoris</button></div>
-        <div className="view-tools"><button aria-label="Vue en grille"><LayoutGrid size={17} /></button><button>Trier : récents <ChevronDown size={14} /></button></div>
+        <div className="collection-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Tous <span>2</span></button><button className={filter === 'installed' ? 'active' : ''} onClick={() => setFilter('installed')}>Installés <span>{installedCount}</span></button><button className={filter === 'updates' ? 'active' : ''} onClick={() => setFilter('updates')}>À mettre à jour <span>{updatesCount}</span></button></div>
+        <div className="view-tools"><div className="view-switch" aria-label="Mode d’affichage"><button className={view === 'list' ? 'active' : ''} aria-label="Petites cartes" onClick={() => setView('list')}><List size={17} /></button><button className={view === 'covers' ? 'active' : ''} aria-label="Pochettes" onClick={() => setView('covers')}><LayoutGrid size={17} /></button></div><div className="sort-menu"><button aria-expanded={sortOpen} onClick={() => setSortOpen((open) => !open)}><ArrowUpDown size={15} /> Trier : récents <ChevronDown size={14} /></button>{sortOpen && <div className="sort-dropdown"><button disabled>Récents <small>Disponible prochainement</small></button><button disabled>Nom du jeu <small>Disponible prochainement</small></button><button disabled>Temps de jeu <small>Disponible prochainement</small></button></div>}</div></div>
       </section>
 
-      <section className="collection-grid">
-        <button data-game="laliferp" className={`collection-game ${selected === 'laliferp' ? 'selected' : ''}`} onClick={() => setSelected('laliferp')} onDoubleClick={() => setPage('laliferp')}>
-          <span className="collection-cover logo-cover life-logo-cover"><img src="/assets/laliferp-cover.png" alt="" /><i className="online-dot" /></span>
+      <section className={`collection-grid ${view === 'covers' ? 'cover-view' : 'list-view'}`}>
+        {showLife && <button data-game="laliferp" className={`collection-game ${selected === 'laliferp' ? 'selected' : ''}`} onClick={() => setSelected('laliferp')} onDoubleClick={() => setPage('laliferp')}>
+          <span className="collection-cover logo-cover life-logo-cover"><img src={view === 'covers' ? '/assets/laliferp-hero-cover.jpg' : '/assets/laliferp-cover.png'} alt="" /><i className="online-dot" /></span>
           <span className="collection-game-copy"><small>FIVEM</small><b>L.A LifeRP</b><em>Prêt à jouer</em></span>
           <Play className="collection-quick-action" size={18} fill="currentColor" />
-        </button>
-        <button data-game="hype" className={`collection-game ${selected === 'hype' ? 'selected' : ''}`} onClick={() => setSelected('hype')} onDoubleClick={() => setPage('hype')}>
-          <span className="collection-cover logo-cover hype-logo-cover"><img src={hypeIcon} alt="" />{installState === 'downloading' && <i className="cover-progress" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties} />}</span>
-          <span className="collection-game-copy"><small>Æ ORIGINALS</small><b>Hype</b><em>{hypeRunning ? 'En jeu' : installState === 'installed' ? 'Prêt à jouer' : installState === 'downloading' ? `${progress} % · Téléchargement GitHub` : 'Disponible'}</em></span>
+        </button>}
+        {showHype && <button data-game="hype" className={`collection-game ${selected === 'hype' ? 'selected' : ''}`} onClick={() => setSelected('hype')} onDoubleClick={() => setPage('hype')}>
+          <span className="collection-cover logo-cover hype-logo-cover">{view === 'covers' ? <HypeArtwork compact /> : <img src={hypeIcon} alt="" />}{installState === 'downloading' && <i className="cover-progress" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties} />}</span>
+          <span className="collection-game-copy"><small>Æ ORIGINALS</small><b>Hype</b><em>{hypeNeedsUpdate ? 'Mise à jour disponible' : hypeRunning ? 'En jeu' : installState === 'installed' ? 'Prêt à jouer' : installState === 'downloading' ? `${progress} % · Téléchargement GitHub` : 'Disponible'}</em></span>
           {hypeRunning ? <X className="collection-quick-action" size={18} /> : installState === 'installed' ? <Play className="collection-quick-action" size={18} fill="currentColor" /> : <Download className="collection-quick-action" size={18} />}
-        </button>
+        </button>}
+        {!showLife && !showHype && <div className="collection-empty"><Check size={20} /><div><b>Aucun jeu dans cette vue</b><small>Vos jeux à mettre à jour apparaîtront automatiquement ici.</small></div></div>}
       </section>
       {launchingGame && <LaunchSequence game={launchingGame === 'laliferp' ? 'L.A LifeRP' : 'Hype'} artwork={launchingGame === 'laliferp' ? '/assets/laliferp-hero.jpg' : hypeAvatar} />}
     </main>
@@ -840,8 +900,8 @@ function DownloadsPage({ installState, installReport, progress, downloadInfo, hy
         <div><h1>Téléchargements</h1><p>Gérez vos installations, mises à jour et contenus additionnels.</p></div>
       </header>
 
-      {installState === 'downloading' && <section className="active-transfer state-downloading">
-        <div className="transfer-art"><img src={hypeIcon} alt="Hype" /></div>
+      {installState === 'downloading' && <section className="active-transfer hype-transfer state-downloading">
+        <HypeArtwork compact />
         <div className="transfer-main">
           <div className="transfer-heading"><div><h2>Hype</h2><p>{phase} · Version {installReport?.version || '0.26.0'}</p></div><strong>GitHub Release</strong></div>
           <div className="transfer-track"><i style={{ width: `${progress}%` }} /></div>
@@ -857,14 +917,14 @@ function DownloadsPage({ installState, installReport, progress, downloadInfo, hy
         </div>
       </section>}
 
-      {installState === 'available' && <section className="download-status-card available">
+      {installState === 'available' && <section className="download-status-card hype-transfer available">
         <HypeArtwork compact />
         <div><span>INSTALLATION DISPONIBLE</span><h2>Hype n’est pas encore installé</h2><p>Ajoutez votre installation existante ou choisissez l’emplacement qui accueillera le jeu.</p></div>
         <button className="transfer-primary" onClick={installHype}><FolderOpen size={18} /> Installer Hype</button>
       </section>}
 
-      {installState === 'installed' && <section className="download-status-card installed">
-        <span className="download-ready-art"><img src={hypeIcon} alt="" /><Check size={18} /></span>
+      {installState === 'installed' && <section className="download-status-card hype-transfer installed">
+        <div className="download-ready-art"><HypeArtwork compact /><Check size={18} /></div>
         <div><span>TOUT EST À JOUR</span><h2>Hype est prêt à jouer</h2><p>{installReport?.verifiedFiles ?? 0} fichier(s) vérifié(s) · Version {installReport?.version || '0.26.0'}</p><code title={installReport?.path}>{installReport?.path || 'Installation locale'}</code></div>
         <button className={`transfer-primary ${hypeRunning ? 'stop-game' : ''}`} onClick={() => void (hypeRunning ? stopHype() : launchHype())}>{hypeRunning ? <X size={18} /> : <Play size={18} fill="currentColor" />} {hypeRunning ? 'Fermer' : 'Jouer'}</button>
       </section>}
@@ -907,6 +967,7 @@ type HypeInstallationActions = {
   onUpdate: () => Promise<string>;
   onRepair: () => Promise<string>;
   onReveal: () => Promise<void>;
+  onMove: () => Promise<HypeInstallReport | null>;
   onForget: () => Promise<void>;
   onUninstall: () => Promise<void>;
 };
@@ -917,8 +978,8 @@ function formatInstallSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1_048_576))} Mo`;
 }
 
-function HypeInstallationPanel({ installState, installReport, hypeRunning, onInstall, onVerify, onUpdate, onRepair, onReveal, onForget, onUninstall }: HypeInstallationActions) {
-  const [busy, setBusy] = useState<'verify' | 'update' | 'repair' | 'uninstall' | null>(null);
+function HypeInstallationPanel({ installState, installReport, hypeRunning, onInstall, onVerify, onUpdate, onRepair, onReveal, onMove, onForget, onUninstall }: HypeInstallationActions) {
+  const [busy, setBusy] = useState<'verify' | 'update' | 'repair' | 'move' | 'uninstall' | null>(null);
   const [feedback, setFeedback] = useState('');
   const [manageOpen, setManageOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<'forget' | 'uninstall' | null>(null);
@@ -944,10 +1005,21 @@ function HypeInstallationPanel({ installState, installReport, hypeRunning, onIns
   };
 
   const repair = async () => {
-    setBusy('repair');
+    setBusy('move');
     setFeedback('');
     try { setFeedback(await onRepair()); }
     catch (error) { setFeedback(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(null); }
+  };
+
+  const moveInstallation = async () => {
+    setBusy('repair');
+    setFeedback('');
+    setManageOpen(false);
+    try {
+      const report = await onMove();
+      if (report) setFeedback(`Installation déplacée vers ${report.path}`);
+    } catch (error) { setFeedback(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(null); }
   };
 
@@ -1004,6 +1076,7 @@ function HypeInstallationPanel({ installState, installReport, hypeRunning, onIns
         <div className="installation-manage-menu">
           <button className="manage-installation-button" aria-expanded={manageOpen} onClick={() => setManageOpen(!manageOpen)}>Gérer l’installation <ChevronDown size={15} /></button>
           {manageOpen && <div className="manage-installation-dropdown">
+            <button disabled={hypeRunning || busy !== null} onClick={() => void moveInstallation()}><MoveRight size={16} /><span><b>Déplacer</b><small>Transfère le jeu vers un autre dossier.</small></span></button>
             <button className="danger" disabled={hypeRunning} onClick={() => { setConfirmation('uninstall'); setManageOpen(false); }}><Trash2 size={16} /><span><b>Désinstaller</b><small>Supprimera le jeu du disque.</small></span></button>
             <button onClick={() => { setConfirmation('forget'); setManageOpen(false); }}><X size={16} /><span><b>Oublier</b><small>Délie l’installation sans supprimer ses fichiers.</small></span></button>
           </div>}
@@ -1015,14 +1088,51 @@ function HypeInstallationPanel({ installState, installReport, hypeRunning, onIns
   );
 }
 
+function formatReleaseDate(date: string) {
+  if (!date) return 'DATE INCONNUE';
+  return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(date)).toUpperCase();
+}
+
+function releaseParagraphs(body: string) {
+  return body.replace(/\r/g, '').split(/\n{2,}/).map((paragraph) => paragraph
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^[-*]\s+/gm, '• ')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/[*_`]/g, '')
+    .trim()).filter(Boolean);
+}
+
+function releaseExcerpt(release: HypeReleaseNews) {
+  const paragraph = releaseParagraphs(release.body)[0] || `Découvrez les changements publiés avec ${release.tagName}.`;
+  return paragraph.length > 180 ? `${paragraph.slice(0, 177).trim()}…` : paragraph;
+}
+
 function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePanel; onClose: () => void } & HypeInstallationActions) {
   const [settings, setSettings] = useState({ notifications: true, animations: true, matureTopics: false });
   const [optionsSection, setOptionsSection] = useState<'general' | 'installation'>('installation');
+  const [releases, setReleases] = useState<HypeReleaseNews[]>([]);
+  const [selectedRelease, setSelectedRelease] = useState<HypeReleaseNews | null>(null);
+  const [releaseLoading, setReleaseLoading] = useState(false);
+  const [releaseError, setReleaseError] = useState('');
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
+  useEffect(() => {
+    if (panel !== 'news') return;
+    let active = true;
+    setReleaseLoading(true);
+    setReleaseError('');
+    void launcherAdapter.getHypeReleases().then((items) => {
+      if (active) setReleases(items);
+    }).catch((error: unknown) => {
+      if (active) setReleaseError(error instanceof Error ? error.message : 'Les Releases GitHub sont indisponibles.');
+    }).finally(() => {
+      if (active) setReleaseLoading(false);
+    });
+    return () => { active = false; };
+  }, [panel]);
   const title = panel === 'achievements' ? 'Succès' : panel === 'friends' ? 'Amis sur Hype' : panel === 'news' ? 'Actualités' : 'Options du jeu';
   return createPortal(
     <div className="game-modal-backdrop hype-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -1030,7 +1140,7 @@ function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePane
         <header><div><img src={hypeLogoWhite} alt="Hype" /><h2>{title}</h2></div><button aria-label="Fermer" onClick={onClose}><X size={18} /></button></header>
         {panel === 'achievements' && <div className="modal-content achievements-modal"><div className="achievement-dashboard"><article><span><Trophy size={17} /></span><div><small>Tous</small><strong>18</strong></div></article><article><span><Check size={17} /></span><div><small>Débloqués</small><strong>6</strong></div></article><article><span><Activity size={17} /></span><div><small>En cours</small><strong>4</strong></div></article><article><span><Gauge size={17} /></span><div><small>Progression</small><strong>33 %</strong></div></article></div><div className="achievement-catalog"><article className="achievement-entry unlocked"><span><Heart size={18} /></span><div className="achievement-copy"><b>Premier crush</b><small>Créer votre première vraie connexion</small></div><em>68,2 %</em><Check size={17} /></article><article className="achievement-entry progress"><span><UserPlus size={18} /></span><div className="achievement-copy"><b>Ça commence à prendre</b><small>Atteindre 1 000 abonnés</small><div className="achievement-item-progress"><i><em style={{ width: '62%' }} /></i><strong>620 / 1 000</strong></div></div><em>24,1 %</em><span className="achievement-percent">62 %</span></article><article className="achievement-entry locked"><span><Globe2 size={18} /></span><div className="achievement-copy"><b>Tout le monde en parle</b><small>Lancer une tendance mondiale</small></div><em>1,7 %</em><span className="achievement-lock">?</span></article></div></div>}
         {panel === 'friends' && <div className="modal-content friends-modal"><p className="modal-intro">Les amis qui façonnent actuellement leur histoire dans Hype.</p>{friends.filter((friend) => friend.game === 'Joue à Hype').map((friend) => <article key={friend.name}><span className="mock-friend-avatar" style={{ background: friend.color }}>{friend.initials}</span><div><b>{friend.name}</b><small>En ligne · Monde « Après minuit »</small></div><span className="friend-playing"><i /> En jeu</span></article>)}</div>}
-        {panel === 'news' && <div className="modal-content hype-news-modal"><article><span>VERSION 0.26.0</span><h3>Une identité à nous</h3><p>Hype adopte sa nouvelle identité visuelle et affine la façon dont vos relations évoluent dans chaque monde.</p><small>15 OCTOBRE</small></article><article><span>JOURNAL DE DÉVELOPPEMENT</span><h3>Des personnages qui se souviennent</h3><p>Les conversations, les rencontres et vos publications laissent désormais une trace plus naturelle dans votre histoire.</p><small>08 OCTOBRE</small></article></div>}
+        {panel === 'news' && <div className="modal-content hype-news-modal">{releaseLoading && <div className="hype-release-state"><RefreshCw className="spinning" size={19} /><span><b>Chargement des Releases GitHub</b><small>Récupération du fil officiel de Hype…</small></span></div>}{releaseError && <div className="hype-release-state error"><AlertTriangle size={19} /><span><b>Actualités indisponibles</b><small>{releaseError}</small></span></div>}{!releaseLoading && !releaseError && selectedRelease && <article className="news-reader"><button className="news-back" onClick={() => setSelectedRelease(null)}><ArrowLeft size={15} /> Retour aux actualités</button><div className="news-reader-hero hype-release-hero"><HypeArtwork compact /><div className="release-hero-copy"><span>{selectedRelease.prerelease ? 'PRÉVERSION' : selectedRelease.tagName}</span><h3>{selectedRelease.name}</h3><small>{formatReleaseDate(selectedRelease.publishedAt)}</small></div></div><div className="news-reader-body">{releaseParagraphs(selectedRelease.body).map((paragraph, index) => <p className={index === 0 ? 'lead' : undefined} key={`${selectedRelease.id}-${index}`}>{paragraph}</p>)}</div></article>}{!releaseLoading && !releaseError && !selectedRelease && releases.length > 0 && <div className="news-feed hype-release-feed"><button className="featured-news hype-featured-release" onClick={() => setSelectedRelease(releases[0])}><HypeArtwork compact /><div className="release-card-copy"><span>{releases[0].tagName}</span><h3>{releases[0].name}</h3><p>{releaseExcerpt(releases[0])}</p><em>Lire les notes <ChevronRight size={15} /></em></div></button><div className="news-grid">{releases.slice(1).map((release) => <button key={release.id} onClick={() => setSelectedRelease(release)}><small>{formatReleaseDate(release.publishedAt)} · {release.prerelease ? 'PRÉVERSION' : 'ACTUALITÉ'}</small><b>{release.name}</b><p>{releaseExcerpt(release)}</p><em>Ouvrir <ChevronRight size={12} /></em></button>)}</div></div>}{!releaseLoading && !releaseError && releases.length === 0 && <div className="hype-release-state"><Newspaper size={19} /><span><b>Aucune actualité publiée</b><small>Les futures versions de Hype apparaîtront ici.</small></span></div>}</div>}
         {panel === 'options' && <div className="hype-options-layout"><nav><button className={optionsSection === 'general' ? 'active' : ''} onClick={() => setOptionsSection('general')}><Settings size={16} /><span><b>Général</b><small>Expérience de jeu</small></span></button><button className={optionsSection === 'installation' ? 'active' : ''} onClick={() => setOptionsSection('installation')}><HardDrive size={16} /><span><b>Installation</b><small>Version et fichiers</small></span></button></nav><div className="hype-options-content">{optionsSection === 'general' ? <div className="modal-content options-modal"><div className="option-block"><span><b>Notifications sociales</b><small>Afficher les nouveaux messages, réactions et abonnements.</small></span><button aria-label="Notifications sociales" aria-pressed={settings.notifications} className={settings.notifications ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, notifications: !settings.notifications })}><i /></button></div><div className="option-block"><span><b>Animations de l’interface</b><small>Conserver les transitions et réactions du fil.</small></span><button aria-label="Animations de l’interface" aria-pressed={settings.animations} className={settings.animations ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, animations: !settings.animations })}><i /></button></div><div className="option-block"><span><b>Thèmes sensibles</b><small>Autoriser les personnages à aborder des sujets plus matures.</small></span><button aria-label="Thèmes sensibles" aria-pressed={settings.matureTopics} className={settings.matureTopics ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, matureTopics: !settings.matureTopics })}><i /></button></div><button className="modal-save" onClick={onClose}>Enregistrer les options</button></div> : <HypeInstallationPanel {...installationActions} />}</div></div>}
       </section>
     </div>,
@@ -1038,7 +1148,7 @@ function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePane
   );
 }
 
-function HypePage({ installState, installReport, progress, hypeRunning, installHype, launchHype, stopHype, onVerify, onUpdate, onRepair, onReveal, onForget, onUninstall }: Pick<DownloadControls, 'installState' | 'installReport' | 'progress' | 'hypeRunning' | 'installHype' | 'launchHype' | 'stopHype'> & Pick<HypeInstallationActions, 'onVerify' | 'onUpdate' | 'onRepair' | 'onReveal' | 'onForget' | 'onUninstall'>) {
+function HypePage({ installState, installReport, progress, hypeRunning, installHype, launchHype, stopHype, onVerify, onUpdate, onRepair, onReveal, onMove, onForget, onUninstall }: Pick<DownloadControls, 'installState' | 'installReport' | 'progress' | 'hypeRunning' | 'installHype' | 'launchHype' | 'stopHype'> & Pick<HypeInstallationActions, 'onVerify' | 'onUpdate' | 'onRepair' | 'onReveal' | 'onMove' | 'onForget' | 'onUninstall'>) {
   const [launching, setLaunching] = useState(false);
   const [openPanel, setOpenPanel] = useState<GamePanel | null>(null);
   const needsRepair = installState === 'installed' && Boolean(installReport && (!installReport.executableFound || installReport.missingFiles.length || installReport.invalidFiles.length));
@@ -1081,12 +1191,7 @@ function HypePage({ installState, installReport, progress, hypeRunning, installH
           </div>
           {installState === 'downloading' && <div className="download-progress hype-download-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{progress} % · Téléchargement en cours</small></div>}
         </>}
-        showcase={<div className="hype-feed-preview" aria-label="Aperçu du réseau social Hype">
-          <div className="hype-feed-top"><img src={hypeAvatar} alt="" /><span><b>ton monde</b><small>pour toi</small></span><i>h.</i></div>
-          <article className="hype-post main-post"><div><span className="generated-avatar avatar-pink">M</span><p><b>Maya</b><small>@maya · 2 min</small></p></div><strong>ok mais ta dernière photo ??? on en parle ou pas</strong><footer><span><Heart size={13} fill="currentColor" /> 248</span><span><MessageCircle size={13} /> 34</span></footer></article>
-          <article className="hype-post reply-post"><div><span className="generated-avatar avatar-yellow">T</span><p><b>Théo</b><small>@theo · maintenant</small></p></div><strong>franchement, t’abuses 😭</strong></article>
-          <div className="hype-feed-alert"><UserPlus size={14} /><span><b>+3 nouveaux abonnés</b><small>depuis ton dernier post</small></span></div>
-        </div>}
+        showcase={<HypeArtwork />}
       />
       <section className="game-body hype-game-body">
         <div className="game-main-column">
@@ -1111,7 +1216,7 @@ function HypePage({ installState, installReport, progress, hypeRunning, installH
       </section>
       <GameDock label={installLabel} icon={hypeRunning ? <X size={19} /> : needsRepair ? <Wrench size={19} /> : installState === 'installed' ? <Play size={19} fill="currentColor" /> : <Download size={19} />} onPrimary={handlePrimaryAction} onPanel={setOpenPanel} showNews friendCount={1} primaryDanger={hypeRunning} />
       {launching && <LaunchSequence game="Hype" artwork={hypeAvatar} />}
-      {openPanel && <HypeModal panel={openPanel} onClose={() => setOpenPanel(null)} installState={installState} installReport={installReport} hypeRunning={hypeRunning} onInstall={installHype} onVerify={onVerify} onUpdate={onUpdate} onRepair={onRepair} onReveal={onReveal} onForget={onForget} onUninstall={onUninstall} />}
+      {openPanel && <HypeModal panel={openPanel} onClose={() => setOpenPanel(null)} installState={installState} installReport={installReport} hypeRunning={hypeRunning} onInstall={installHype} onVerify={onVerify} onUpdate={onUpdate} onRepair={onRepair} onReveal={onReveal} onMove={onMove} onForget={onForget} onUninstall={onUninstall} />}
     </main>
   );
 }
@@ -1151,11 +1256,17 @@ function SettingsPage({ settings, updateSettings, effectiveScale, onChooseInstal
   const [updateVersion, setUpdateVersion] = useState('');
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateMessage, setUpdateMessage] = useState('');
+  const [scaleDraft, setScaleDraft] = useState(settings.uiScale);
   const toggle = (key: keyof LauncherSettings, label: string) => <SettingsToggle label={label} checked={Boolean(settings[key])} onChange={(value) => updateSettings({ [key]: value })} />;
 
   useEffect(() => {
     launcherAdapter.getLauncherVersion().then(setLauncherVersion).catch(() => setLauncherVersion('Inconnue'));
   }, []);
+
+  useEffect(() => setScaleDraft(settings.uiScale), [settings.uiScale]);
+  const applyScaleDraft = () => {
+    if (settings.scaleMode !== 'custom' || scaleDraft !== settings.uiScale) updateSettings({ uiScale: scaleDraft, scaleMode: 'custom' });
+  };
 
   const runVerification = async () => {
     setChecking(true);
@@ -1214,9 +1325,9 @@ function SettingsPage({ settings, updateSettings, effectiveScale, onChooseInstal
             <div className="settings-section-title"><span><Monitor size={19} /></span><div><h2>Interface</h2><p>Une lecture confortable, quelle que soit la taille de votre écran.</p></div></div>
             <div className="scale-stage">
               <div className="scale-preview"><span className="preview-rail"><i /><i /><i /></span><span className="preview-content"><b /><i /><i /></span></div>
-              <div><span>APERÇU EN DIRECT</span><strong>{Math.round(effectiveScale * 100)} %</strong><small>{settings.scaleMode === 'auto' ? 'Adapté automatiquement à cette fenêtre' : 'Échelle personnalisée'}</small></div>
+              <div><span>APERÇU EN DIRECT</span><strong>{settings.scaleMode === 'auto' ? Math.round(effectiveScale * 100) : scaleDraft} %</strong><small>{settings.scaleMode === 'auto' ? 'Adapté automatiquement à cette fenêtre' : 'Appliquée au relâchement du curseur'}</small></div>
             </div>
-            <div className="settings-group"><h3>Taille de l’interface</h3><SettingsRow title="Échelle automatique" description="Ajuster la taille selon la résolution et la fenêtre."><SettingsToggle label="Échelle automatique" checked={settings.scaleMode === 'auto'} onChange={(checked) => updateSettings({ scaleMode: checked ? 'auto' : 'custom' })} /></SettingsRow><div className={`scale-control ${settings.scaleMode === 'auto' ? 'disabled' : ''}`}><div><span>Échelle personnalisée</span><b>{settings.uiScale} %</b></div><input type="range" min="80" max="150" step="5" value={settings.uiScale} disabled={settings.scaleMode === 'auto'} onChange={(event) => updateSettings({ uiScale: Number(event.target.value), scaleMode: 'custom' })} /><div className="scale-marks"><span>80 %</span><span>100 %</span><span>125 %</span><span>150 %</span></div></div></div>
+            <div className="settings-group"><h3>Taille de l’interface</h3><SettingsRow title="Échelle automatique" description="Ajuster la taille selon la résolution et la fenêtre, avec 150 % recommandé en 4K."><SettingsToggle label="Échelle automatique" checked={settings.scaleMode === 'auto'} onChange={(checked) => updateSettings({ scaleMode: checked ? 'auto' : 'custom' })} /></SettingsRow><div className={`scale-control ${settings.scaleMode === 'auto' ? 'disabled' : ''}`}><div><span>Échelle personnalisée</span><b>{scaleDraft} %</b></div><input type="range" min="80" max="200" step="5" value={scaleDraft} disabled={settings.scaleMode === 'auto'} onChange={(event) => setScaleDraft(Number(event.target.value))} onPointerUp={applyScaleDraft} onPointerCancel={applyScaleDraft} onKeyUp={applyScaleDraft} onBlur={applyScaleDraft} /><div className="scale-marks"><span>80 %</span><span>100 %</span><span>125 %</span><span>150 %</span><span>200 %</span></div></div></div>
             <div className="settings-group"><h3>Confort visuel</h3><SettingsRow title="Interface compacte" description="Réduire l’espacement tout en conservant la taille du texte.">{toggle('compactMode', 'Interface compacte')}</SettingsRow><SettingsRow title="Réduire les animations" description="Limiter les transitions et effets de mouvement.">{toggle('reducedMotion', 'Réduire les animations')}</SettingsRow><SettingsRow title="Contraste renforcé" description="Accentuer les textes secondaires et les séparations.">{toggle('highContrast', 'Contraste renforcé')}</SettingsRow></div>
           </>}
 
@@ -1262,11 +1373,17 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [hypePath, setHypePath] = useState(() => localStorage.getItem('ae-hype-install-path') || '');
   const [hypeRunning, setHypeRunning] = useState(false);
   const [settings, setSettings] = useState<LauncherSettings>(loadLauncherSettings);
-  const [automaticScale, setAutomaticScale] = useState(() => window.innerWidth >= 3000 ? 1.28 : window.innerWidth >= 2200 ? 1.16 : 1);
+  const [automaticScale, setAutomaticScale] = useState(getAutomaticInterfaceScale);
   const effectiveScale = settings.scaleMode === 'auto' ? automaticScale : settings.uiScale / 100;
 
   useEffect(() => {
     document.documentElement.style.setProperty('--launcher-ui-scale', String(effectiveScale));
+    if (launcherAdapter.environment === 'desktop') {
+      void getCurrentWindow().setMinSize(new LogicalSize(
+        Math.ceil(MIN_INTERFACE_WIDTH * effectiveScale),
+        Math.ceil(MIN_INTERFACE_HEIGHT * effectiveScale),
+      ));
+    }
     return () => {
       document.documentElement.style.removeProperty('--launcher-ui-scale');
     };
@@ -1298,7 +1415,7 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   }, []);
 
   useEffect(() => {
-    const updateAutomaticScale = () => setAutomaticScale(window.innerWidth >= 3000 ? 1.28 : window.innerWidth >= 2200 ? 1.16 : 1);
+    const updateAutomaticScale = () => setAutomaticScale(getAutomaticInterfaceScale());
     window.addEventListener('resize', updateAutomaticScale);
     return () => window.removeEventListener('resize', updateAutomaticScale);
   }, []);
@@ -1418,6 +1535,16 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     if (!hypePath) throw new Error('Aucune installation de Hype n’est liée au launcher.');
     await launcherAdapter.revealHypeInstallation(hypePath);
   };
+  const moveHype = async () => {
+    if (!hypePath) throw new Error('Aucune installation de Hype n’est liée au launcher.');
+    if (hypeRunning) throw new Error('Fermez Hype avant de déplacer son installation.');
+    const report = await launcherAdapter.moveHypeInstallation(hypePath);
+    if (!report) return null;
+    setInstallReport(report);
+    setHypePath(report.path);
+    localStorage.setItem('ae-hype-install-path', report.path);
+    return report;
+  };
   const forgetHype = async () => {
     localStorage.removeItem('ae-hype-install-path');
     setHypePath('');
@@ -1443,19 +1570,18 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   };
   const verifyLauncher = () => launcherAdapter.verifyLauncherInstallation();
   const cancelDownload = () => { void launcherAdapter.cancelHypeDownload(); };
-  const pageTitle = page === 'accueil' ? 'Accueil' : page === 'bibliotheque' ? 'Bibliothèque' : page === 'telechargements' ? 'Téléchargements' : page === 'reglages' ? 'Réglages' : page === 'laliferp' ? 'L.A LifeRP' : 'Hype';
   return (
-    <div className={`launcher-shell theme-${page} ${settings.compactMode ? 'ui-compact' : ''} ${settings.reducedMotion ? 'ui-reduced-motion' : ''} ${settings.highContrast ? 'ui-high-contrast' : ''}`} style={{ '--ui-scale': effectiveScale } as React.CSSProperties}>
+    <div className={`launcher-shell theme-${page} ${page === 'telechargements' ? 'theme-hype' : ''} ${settings.compactMode ? 'ui-compact' : ''} ${settings.reducedMotion ? 'ui-reduced-motion' : ''} ${settings.highContrast ? 'ui-high-contrast' : ''}`} style={{ '--ui-scale': effectiveScale } as React.CSSProperties}>
       <Sidebar page={page} setPage={setPage} installState={installState} progress={progress} hypeRunning={hypeRunning} user={user} onSignOut={onSignOut} />
       <section className="workspace">
-        <Topbar title={pageTitle} setPage={setPage} />
+        <Topbar setPage={setPage} />
         <div className="workspace-scroll" key={page}>
-          {page === 'accueil' && <HomePage setPage={setPage} />}
-          {page === 'bibliotheque' && <LibraryPage setPage={setPage} installState={installState} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} />}
+          {page === 'accueil' && <HomePage setPage={setPage} user={user} />}
+          {page === 'bibliotheque' && <LibraryPage setPage={setPage} installState={installState} installReport={installReport} hypePath={hypePath} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} />}
           {page === 'telechargements' && <DownloadsPage installState={installState} installReport={installReport} progress={progress} downloadInfo={downloadInfo} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} cancelDownload={cancelDownload} />}
           {page === 'reglages' && <SettingsPage settings={settings} updateSettings={updateSettings} effectiveScale={effectiveScale} onChooseInstall={chooseDefaultInstallDirectory} onVerifyLauncher={verifyLauncher} onReset={() => setSettings(defaultLauncherSettings)} />}
           {page === 'laliferp' && <LifeRpPage />}
-          {page === 'hype' && <HypePage installState={installState} installReport={installReport} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} onVerify={verifyHype} onUpdate={updateHype} onRepair={repairHype} onReveal={revealHype} onForget={forgetHype} onUninstall={uninstallHype} />}
+          {page === 'hype' && <HypePage installState={installState} installReport={installReport} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} onVerify={verifyHype} onUpdate={updateHype} onRepair={repairHype} onReveal={revealHype} onMove={moveHype} onForget={forgetHype} onUninstall={uninstallHype} />}
         </div>
         {installState === 'downloading' && page !== 'telechargements' && <button className="download-capsule" onClick={() => setPage('telechargements')}><span className="capsule-ring" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties}><Download size={14} /></span><span><b>Hype · {progress} %</b><small>Installation depuis GitHub · Voir le transfert</small></span><ChevronRight size={16} /></button>}
       </section>

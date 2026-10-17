@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@800&display=swap');
+
 :root {
   font-family: Inter, Arial, Helvetica, sans-serif;
   color: #f5f7fa;
@@ -12,6 +14,20 @@
   --line: rgba(255,255,255,.085);
   --muted: #898989;
   --soft: #bcbcbc;
+  --text-micro: 11px;
+  --text-secondary: 12px;
+  --text-interface: 13px;
+  --text-body: 14px;
+  --text-h4: 15px;
+  --text-h3: 18px;
+  --text-stat: 22px;
+  --text-h2: 24px;
+  --text-h1: 34px;
+  --text-display: clamp(48px, 4vw, 68px);
+  --leading-display: 1.04;
+  --leading-heading: 1.2;
+  --leading-interface: 1.35;
+  --leading-body: 1.55;
 }
 
 * { box-sizing: border-box; }
@@ -272,7 +288,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .download-progress > span { display: block; width: 100%; height: 3px; border-radius: 4px; background: rgba(255,255,255,.13); overflow: hidden; }
 .download-progress i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 10px var(--accent); transition: width .1s linear; }
 .download-progress small { display: block; margin-top: 6px; color: #8993a0; font-size: 7px; }
-.hype-feature { height: 185px; margin-bottom: 31px; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: linear-gradient(100deg, rgba(11,16,23,.94), rgba(12,32,43,.6)), url('/assets/hype-hero.png') center / cover; }
+.hype-feature { height: 185px; margin-bottom: 31px; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: radial-gradient(circle at 78% 28%, rgba(255,79,160,.23), transparent 30%), linear-gradient(100deg, rgba(24,13,19,.96), rgba(20,12,17,.72)); }
 .hype-feature > div { width: 58%; height: 100%; padding: 25px; background: linear-gradient(90deg, rgba(10,14,20,.98), rgba(10,14,20,.55), transparent); }
 .feature-number { color: var(--accent); font-size: 8px; font-weight: 700; }
 .hype-feature h3 { font-size: 18px; margin: 13px 0 8px; }
@@ -302,7 +318,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .launcher-shell {
   --game-accent: #4eaac8;
   --game-accent-rgb: 78, 170, 200;
-  --page-art: url('/assets/hype-hero.png');
+  --page-art: none;
 }
 
 .theme-laliferp {
@@ -314,7 +330,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .theme-hype {
   --game-accent: #73cae7;
   --game-accent-rgb: 115, 202, 231;
-  --page-art: url('/assets/hype-hero.png');
+  --page-art: none;
 }
 
 .workspace {
@@ -1420,7 +1436,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   --shell-base: #071116;
   --shell-deep: #04090c;
   --shell-wash: 100, 203, 239;
-  --page-art: url('/assets/hype-hero.png');
+  --page-art: none;
   --shell-art-opacity: .13;
 }
 .theme-telechargements { --shell-base: #071014; --shell-wash: 84, 190, 222; }
@@ -1623,7 +1639,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   --shell-base: #071116;
   --shell-deep: #04090c;
   --shell-wash: 100, 203, 239;
-  --page-art: url('/assets/hype-hero.png');
+  --page-art: none;
   --shell-art-opacity: .16;
 }
 
@@ -1892,7 +1908,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   animation: profile-rise .25s cubic-bezier(.2,.8,.2,1) both;
 }
 @keyframes profile-rise { from { opacity: 0; transform: translateY(9px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.profile-banner { height: 76px; background: linear-gradient(90deg, rgba(11,12,15,.2), rgba(78,170,200,.25)), url('/assets/hype-hero.png') center 42% / cover; }
+.profile-banner { height: 76px; background: radial-gradient(circle at 75% 20%, rgba(255,79,160,.3), transparent 34%), linear-gradient(135deg, #25131e, #0c0a0b); }
 .profile-summary { position: relative; padding: 35px 14px 13px; }
 .profile-avatar { position: absolute; top: -28px; left: 14px; width: 56px; height: 56px; display: grid; place-items: center; border: 4px solid #101112; border-radius: 15px; background: linear-gradient(145deg, #274c5a, var(--accent)); color: #fff; font-size: 13px; font-weight: 750; }
 .avatar.has-image,
@@ -2306,7 +2322,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .library-ambient span { position: absolute; inset: -7%; opacity: 0; background-position: center top; background-size: cover; filter: blur(72px) saturate(.7); transform: scale(1.08); transition: opacity .72s ease-in-out; }
 .library-ambient span::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,9,10,.55), var(--shell-base) 76%); }
 .library-ambient .ambient-life { background-image: url('/assets/laliferp-hero.jpg'); }
-.library-ambient .ambient-hype { background-image: url('/assets/hype-hero.png'); }
+.library-ambient .ambient-hype { background-image: radial-gradient(circle at 65% 30%, rgba(255,79,160,.42), transparent 34%), url('/assets/hype-avatar.svg'); background-size: cover, 32%; background-repeat: no-repeat; background-position: center, 76% 24%; }
 .library-focus-laliferp .ambient-life { opacity: .19; }
 .library-focus-hype .ambient-hype { opacity: .2; }
 .library-page:has(.collection-game[data-game='laliferp']:hover) .ambient-life { opacity: .23; }
@@ -2648,42 +2664,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   100% { transform: translateY(0); }
 }
 
-/* Hype key art replaces the retired prototype illustration. */
-.hype-key-art {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 220px;
-  overflow: hidden;
-  border-radius: inherit;
-  background:
-    radial-gradient(circle at 72% 35%, rgba(255,79,160,.34), transparent 31%),
-    radial-gradient(circle at 25% 82%, rgba(255,212,77,.14), transparent 28%),
-    linear-gradient(135deg, #25131e, #100b0e 68%);
-}
-.hype-key-art > img { position: absolute; z-index: 2; left: 10%; top: 13%; width: 34%; height: auto; filter: drop-shadow(0 14px 28px rgba(0,0,0,.34)); }
-.hype-key-orbit { position: absolute; width: 70%; aspect-ratio: 1; right: -16%; top: -34%; border: 1px solid rgba(255,79,160,.2); border-radius: 50%; box-shadow: 0 0 0 44px rgba(255,79,160,.035), 0 0 0 88px rgba(255,79,160,.022); }
-.hype-key-post { position: absolute; z-index: 2; padding: 9px 11px; display: flex; align-items: center; gap: 8px; border-radius: 12px; background: rgba(31,21,27,.86); color: #fff; box-shadow: 0 16px 35px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.08); backdrop-filter: blur(14px); }
-.hype-key-post i { display: flex; flex-direction: column; gap: 3px; font-style: normal; }
-.hype-key-post b { font-size: 9px; }
-.hype-key-post small { color: rgba(255,255,255,.46); font-size: 7px; }
-.hype-key-post.post-one { left: 11%; bottom: 15%; }
-.hype-key-post.post-two { right: 10%; top: 38%; color: #ff4fa0; }
-.hype-key-post.post-two i { color: #fff; }
-.hype-key-dot { position: absolute; right: 13%; bottom: 15%; width: 8px; height: 8px; border-radius: 50%; background: #ffd44d; box-shadow: 0 0 22px rgba(255,212,77,.7); }
-.hype-key-art.compact { min-height: 0; }
-.hype-key-art.compact .hype-key-post { transform: scale(.76); }
-
-.hype-library-card > .hype-key-art { position: absolute; inset: 0; border-radius: 0; }
-.hype-library-card:hover > .hype-key-art { filter: saturate(1.08); }
-.spotlight-scene > .hype-key-art { position: absolute; inset: 0; min-height: 0; border-radius: 0; animation: spotlight-art-in .72s cubic-bezier(.2,.78,.2,1) both; }
 .spotlight-logo { display: block; height: auto; margin-bottom: 14px; object-fit: contain; object-position: left center; }
 .spotlight-logo.life { width: 240px; max-height: 76px; }
 .spotlight-logo.hype { width: 112px; max-height: 48px; }
 .collection-cover.logo-cover { overflow: hidden; border-radius: 10px; }
-.collection-cover.logo-cover img { object-fit: cover; border-radius: 0; }
+.collection-cover.logo-cover > img { object-fit: cover; border-radius: 0; }
 .hype-logo-cover { padding: 17px; background: linear-gradient(145deg, #2c1623, #100b0e); }
-.hype-logo-cover img { object-fit: contain !important; }
+.hype-logo-cover > img { object-fit: contain !important; }
 .life-logo-cover { background: #17101d; }
 
 .theme-bibliotheque:has(.library-focus-hype),
@@ -2710,15 +2697,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   background: linear-gradient(110deg, rgba(8,27,35,.84), rgba(12,18,21,.66));
   box-shadow: inset 0 0 0 1px rgba(94,204,235,.12), 0 30px 80px rgba(0,0,0,.25);
 }
-.download-status-card > .hype-key-art { width: 180px; height: 180px; min-height: 0; border-radius: 17px; }
-.download-status-card > div:not(.hype-key-art) { min-width: 0; }
+.download-status-card > div { min-width: 0; }
 .download-status-card > div > span { color: #73cae7; font-size: 8px; font-weight: 750; letter-spacing: .16em; }
 .download-status-card h2 { margin: 9px 0 7px; font-size: 28px; letter-spacing: -.04em; }
 .download-status-card p { margin: 0; color: rgba(255,255,255,.46); font-size: 10px; line-height: 1.55; }
 .download-status-card code { max-width: 100%; margin-top: 11px; display: block; overflow: hidden; color: rgba(255,255,255,.3); font: 8px Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .download-status-card > .transfer-primary { min-width: 142px; height: 43px; padding: 0 18px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 10px; cursor: pointer; }
 .download-ready-art { width: 180px; height: 180px; position: relative; display: grid; place-items: center; border-radius: 17px; background: linear-gradient(145deg, #25131e, #100b0e); }
-.download-ready-art img { width: 55%; height: 55%; object-fit: contain; }
+.download-ready-art > img { width: 55%; height: 55%; object-fit: contain; }
 .download-ready-art svg { position: absolute; right: 13px; bottom: 13px; width: 32px; height: 32px; padding: 8px; border-radius: 50%; background: #4bc58a; color: #07120d; }
 .queue-empty { min-height: 82px; padding: 0 18px; display: flex; align-items: center; gap: 12px; border-radius: 14px; background: rgba(255,255,255,.022); color: rgba(255,255,255,.24); }
 .queue-empty > span { display: flex; flex-direction: column; gap: 5px; }
@@ -2750,7 +2736,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   .game-page-hero-layout { padding: 64px 76px 88px; }
   .hype-game-hero .game-page-hero-copy > p { font-size: 13px; }
   .download-status-card { min-height: 285px; grid-template-columns: 220px minmax(0, 1fr) auto; padding: 31px; gap: 37px; }
-  .download-status-card > .hype-key-art,
   .download-ready-art { width: 220px; height: 220px; }
 }
 
@@ -2760,7 +2745,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 
 .ui-compact .download-status-card { min-height: 195px; grid-template-columns: 145px minmax(0, 1fr) auto; gap: 20px; padding: 18px; border-radius: 17px; }
-.ui-compact .download-status-card > .hype-key-art,
 .ui-compact .download-ready-art { width: 145px; height: 145px; }
 .ui-high-contrast .download-status-card { background: linear-gradient(110deg, rgba(10,31,40,.98), rgba(16,20,22,.97)); }
 
@@ -2860,3 +2844,454 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   .installation-facts { grid-column: 1 / -1; }
   .maintenance-actions { grid-template-columns: 1fr; }
 }
+
+/* Unified launcher type hierarchy. Every readable string resolves to one of
+   these semantic levels; older component declarations cannot create one-off
+   sizes or weights. Oversized pseudo-elements remain artwork, not content. */
+body {
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: var(--leading-body);
+}
+
+:where(body *) {
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+}
+
+h1,
+.welcome-row h1,
+.downloads-header h1,
+.settings-heading h1 {
+  font-size: var(--text-h1) !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -.035em !important;
+}
+
+h2,
+.section-heading h2,
+.download-section-title h2,
+.settings-section-title h2,
+.game-modal > header h2,
+.friend-dialog h2 {
+  font-size: var(--text-h2) !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -.025em !important;
+}
+
+h3,
+.drawer-heading h3,
+.news-card h3,
+.featured-news h3,
+.option-section-heading h3,
+.installation-section-heading h3,
+.installation-confirmation h3,
+.installation-empty h3 {
+  font-size: var(--text-h3) !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  letter-spacing: -.015em !important;
+}
+
+h4,
+.pack-card h4 {
+  font-size: var(--text-h4) !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+}
+
+p {
+  font-size: var(--text-body) !important;
+  font-weight: 400 !important;
+  line-height: var(--leading-body) !important;
+}
+
+button,
+input,
+select,
+textarea,
+label,
+code,
+b,
+strong {
+  font-size: var(--text-interface) !important;
+  line-height: var(--leading-interface) !important;
+}
+
+button,
+label,
+b,
+strong {
+  font-weight: 600 !important;
+}
+
+small,
+em,
+kbd {
+  font-size: var(--text-secondary) !important;
+  font-weight: 400 !important;
+  line-height: 1.45 !important;
+}
+
+:is(h1, h2, h3, h4) :is(span, em, strong, b, small) {
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+}
+
+.stat-card p,
+.activity-list p,
+.session-card p,
+.info-card p,
+.news-card p,
+.patch-card p,
+.spotlight-copy > p,
+.transfer-heading p,
+.news-grid p,
+.featured-news p,
+.news-reader-body p,
+.hype-feature p,
+.hype-loop-grid p,
+.hype-pulse-card p,
+.hype-news-modal p,
+.installer-content p,
+.installation-confirmation p,
+.installation-empty p {
+  font-size: var(--text-secondary) !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+}
+
+.login-copy h1,
+.hype-hero h1,
+.hype-hero-content h1,
+.hype-game-hero .game-page-hero-copy h1,
+.launch-content h2 {
+  font-size: var(--text-display) !important;
+  font-weight: 700 !important;
+  line-height: var(--leading-display) !important;
+  letter-spacing: -.045em !important;
+}
+
+.continue-copy h2,
+.spotlight-copy h2,
+.transfer-heading h2,
+.download-status-card h2,
+.news-reader-hero h3 {
+  font-size: var(--text-h1) !important;
+  font-weight: 600 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -.035em !important;
+}
+
+.library-info b,
+.session-card h3,
+.hype-feature h3,
+.hype-loop-grid h3,
+.hype-pulse-card h3,
+.hype-news-modal h3,
+.installer-content h3 {
+  font-size: var(--text-h3) !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+
+.stat-card strong,
+.speed-value > b,
+.achievement-progress strong,
+.achievement-dashboard strong,
+.scale-stage strong,
+.hype-profile-card strong {
+  font-size: var(--text-stat) !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+.eyebrow,
+.auth-kicker,
+.group-title,
+.resume-label,
+.game-type,
+.signal-status,
+.rail-label,
+.spotlight-category,
+.transfer-heading small,
+.download-section-title .eyebrow,
+.download-section-title > span,
+.settings-group > h3,
+.settings-health span,
+.scale-stage > div:last-child > span,
+.settings-path small,
+.launcher-update-summary small,
+.game-modal > header span,
+.featured-news > span,
+.news-reader-hero > span,
+.hype-version span,
+.hype-pulse-card > div > span,
+.hype-news-modal > span,
+.installation-identity > span,
+.installation-section-heading span,
+.installation-management > div:first-child > span,
+.installation-empty > div:nth-child(2) > span,
+.installation-facts small,
+.installation-location small {
+  font-size: var(--text-micro) !important;
+  font-weight: 700 !important;
+  line-height: var(--leading-interface) !important;
+  letter-spacing: .12em !important;
+}
+
+.brand strong {
+  font-size: var(--text-h4) !important;
+  font-weight: 700 !important;
+  line-height: var(--leading-interface) !important;
+}
+
+.brand span,
+.topbar-context small,
+.game-dock button small,
+.dock-notice,
+.status-pill,
+.count {
+  font-size: var(--text-micro) !important;
+  font-weight: 700 !important;
+  line-height: var(--leading-interface) !important;
+}
+
+.primary-play,
+.spotlight-actions button,
+.transfer-controls button,
+.settings-action,
+.launcher-update-install,
+.modal-save,
+.manage-installation-button,
+.installation-confirmation button {
+  font-size: var(--text-interface) !important;
+  font-weight: 700 !important;
+  line-height: var(--leading-interface) !important;
+}
+
+/* Interface corrections — navigation, library views and branded surfaces. */
+.brand div { gap: 4px; }
+.brand strong { letter-spacing: -.015em !important; }
+.brand span { margin-top: 0; max-width: 145px; color: rgba(255,255,255,.4); letter-spacing: .015em !important; white-space: nowrap; }
+.sidebar-brand { justify-content: flex-start; }
+
+.topbar { -webkit-app-region: drag; }
+.topbar button,
+.topbar input,
+.topbar label,
+.topbar-menu-wrap,
+.search-shell,
+.window-buttons { -webkit-app-region: no-drag; }
+.window-buttons { align-self: center; gap: 5px; margin: 0 11px 0 5px; }
+.window-buttons button { width: 34px; height: 34px; border-radius: 9px; transition: color .18s ease, background .18s ease; }
+.window-buttons button:hover { color: #fff; background: rgba(255,255,255,.075); }
+.window-buttons button:last-child:hover { background: rgba(196,43,59,.88); }
+
+.party-peek { gap: 7px; }
+.party-peek > span:last-child { gap: 0; line-height: 1.05; }
+.party-peek > span:last-child b,
+.party-peek > span:last-child small { line-height: 1.1 !important; }
+.party-avatars { padding-left: 11px; }
+
+.hype-library-card > .hype-home-banner { object-position: right center; }
+.hype-library-card .card-overlay { background: linear-gradient(90deg, rgba(8,11,16,.96) 0%, rgba(8,11,16,.78) 42%, rgba(8,11,16,.16) 100%); }
+.hype-library-card .library-info,
+.hype-library-card .round-play { z-index: 2; }
+
+.theme-bibliotheque:has(.library-focus-laliferp) {
+  --game-accent: #007ffe;
+  --game-accent-rgb: 0,127,254;
+  --shell-base: #070b12;
+  --shell-deep: #04070b;
+  --shell-wash: 0,127,254;
+  --page-art: url('/assets/laliferp-hero.jpg');
+  --shell-art-opacity: .2;
+}
+.theme-bibliotheque:has(.library-focus-hype) {
+  --game-accent: #ff4fa0;
+  --game-accent-rgb: 255,79,160;
+  --shell-base: #110c0f;
+  --shell-deep: #090609;
+  --shell-wash: 255,79,160;
+  --page-art: url('/assets/hype-avatar.svg');
+  --shell-art-opacity: .1;
+}
+.theme-bibliotheque:has(.library-focus-laliferp) .sidebar { background: linear-gradient(180deg, rgba(8,13,20,.95), rgba(6,8,12,.85)); }
+.theme-bibliotheque:has(.library-focus-laliferp) .topbar { background: linear-gradient(90deg, rgba(7,13,21,.88), rgba(7,9,13,.52)); }
+.theme-bibliotheque:has(.library-focus-laliferp) .workspace { background: linear-gradient(110deg, rgba(6,10,16,.78), rgba(7,9,12,.27) 58%, rgba(5,10,17,.5)); }
+.theme-bibliotheque:has(.library-focus-hype) .sidebar { background: linear-gradient(180deg, rgba(24,16,21,.94), rgba(13,9,12,.86)); }
+.theme-bibliotheque:has(.library-focus-hype) .topbar { background: linear-gradient(90deg, rgba(25,17,22,.88), rgba(15,10,13,.58)); }
+.theme-bibliotheque:has(.library-focus-hype) .workspace { background: linear-gradient(110deg, rgba(17,12,15,.74), rgba(12,8,10,.32) 58%, rgba(19,12,16,.5)); }
+.library-focus-laliferp .spotlight-primary { background: #007ffe; }
+.library-focus-hype .spotlight-primary { background: #ff4fa0; color: #210b15; }
+.library-focus-laliferp .spotlight-category { color: #65adff; }
+.library-focus-hype .spotlight-category { color: #ff79b7; }
+
+.view-switch { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: rgba(255,255,255,.025); }
+.view-switch button { background: transparent; }
+.view-switch button.active { color: #fff; background: rgba(var(--shell-wash), .14); }
+.sort-menu { position: relative; }
+.sort-dropdown { position: absolute; z-index: 20; top: calc(100% + 7px); right: 0; width: 215px; padding: 6px; border-radius: 12px; background: rgba(14,15,16,.98); box-shadow: 0 22px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.07); }
+.sort-dropdown button { width: 100%; height: auto; min-height: 49px; padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; text-align: left; opacity: .55; }
+.sort-dropdown small { color: rgba(255,255,255,.35); }
+
+.collection-grid.cover-view { grid-template-columns: repeat(auto-fill, minmax(220px, 280px)); align-items: start; }
+.cover-view .collection-game { height: auto; aspect-ratio: 1; position: relative; display: block; overflow: hidden; padding: 0; border-radius: 18px; }
+.cover-view .collection-cover { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cover-view .collection-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(5,7,9,.94), rgba(5,7,9,.08) 72%); }
+.cover-view .collection-cover img { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }
+.cover-view .collection-cover > .online-dot { z-index: 2; right: 15px; bottom: 15px; }
+.cover-view .cover-progress { z-index: 2; inset: 12px 12px auto auto; width: 33px; height: 33px; }
+.cover-view .collection-game-copy { position: absolute; z-index: 2; left: 18px; right: 54px; bottom: 17px; }
+.cover-view .collection-quick-action { position: absolute; z-index: 2; right: 16px; bottom: 16px; opacity: 1; transform: none; }
+.collection-empty { grid-column: 1 / -1; min-height: 100px; padding: 20px; display: flex; align-items: center; justify-content: center; gap: 12px; border-radius: 16px; color: rgba(255,255,255,.45); background: rgba(255,255,255,.025); }
+.collection-empty > div { display: flex; flex-direction: column; gap: 4px; }
+.collection-empty small { color: rgba(255,255,255,.32); }
+
+.hype-transfer { --transfer-accent: #ff4fa0; --transfer-accent-rgb: 255,79,160; }
+.active-transfer.hype-transfer { background: linear-gradient(108deg, rgba(35,15,26,.94), rgba(24,14,20,.84) 58%, rgba(16,12,14,.76)); box-shadow: inset 0 0 0 1px rgba(var(--transfer-accent-rgb),.16), 0 30px 80px rgba(0,0,0,.25); }
+.hype-transfer .transfer-track i,
+.hype-transfer .transfer-primary { background: var(--transfer-accent); color: #210b15; box-shadow: 0 0 16px rgba(var(--transfer-accent-rgb),.45); }
+.hype-transfer .transfer-performance svg,
+.download-status-card.hype-transfer > div > span { color: var(--transfer-accent); }
+.download-status-card.hype-transfer { background: linear-gradient(115deg, rgba(35,15,26,.86), rgba(20,14,17,.72)); box-shadow: inset 0 0 0 1px rgba(var(--transfer-accent-rgb),.13); }
+
+.hype-game-modal > header > div { flex-direction: row; align-items: center; gap: 17px; }
+.hype-game-modal > header img { width: 70px; flex: none; }
+.hype-game-modal > header h2 {
+  font-family: 'Unbounded', Arial, Helvetica, sans-serif !important;
+  font-size: var(--text-h3) !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -.04em !important;
+}
+.hype-news-modal { display: block; }
+.hype-release-state { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 12px; color: rgba(246,238,242,.62); }
+.hype-release-state > span { display: flex; flex-direction: column; gap: 4px; }
+.hype-release-state small { color: rgba(246,238,242,.38); }
+.hype-release-state.error { color: #ef7c87; }
+.hype-featured-release,
+.hype-release-hero { background: radial-gradient(circle at 78% 28%, rgba(255,79,160,.2), transparent 34%), linear-gradient(120deg, #201018, #100b0e); }
+.hype-release-feed .news-grid button { background: linear-gradient(145deg, rgba(255,79,160,.075), rgba(255,255,255,.025)); }
+.hype-release-feed .news-grid small,
+.hype-release-feed .featured-news span,
+.hype-release-hero span { color: #ff4fa0; }
+
+/* One canonical Hype banner: the social-feed card from the game page. */
+.hype-banner-art {
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 76% 27%, rgba(255,79,160,.3), transparent 32%),
+    radial-gradient(circle at 22% 82%, rgba(255,212,77,.1), transparent 27%),
+    linear-gradient(135deg, #25131e, #100b0e 70%);
+}
+.hype-banner-art::before { content: ''; position: absolute; width: 74%; aspect-ratio: 1; right: -21%; top: -42%; border: 1px solid rgba(255,79,160,.16); border-radius: 50%; box-shadow: 0 0 0 55px rgba(255,79,160,.025), 0 0 0 110px rgba(255,79,160,.015); }
+.hype-banner-art > .hype-feed-preview { width: min(390px, 78%); margin: 0; }
+.hype-banner-art.compact { min-height: 0; }
+.hype-banner-art.compact > .hype-feed-preview { width: 340px; flex: none; transform: rotate(1.5deg) scale(.66); }
+.game-page-hero-showcase > .hype-banner-art { min-height: 430px; overflow: visible; background: transparent; }
+.game-page-hero-showcase > .hype-banner-art::before { display: none; }
+.game-page-hero-showcase > .hype-banner-art > .hype-feed-preview { width: 100%; animation: MoveUpDown 2s ease-in-out infinite; }
+.hype-library-card > .hype-banner-art { position: absolute; inset: 0; z-index: 0; border-radius: 0; }
+.hype-library-card > .hype-banner-art > .hype-feed-preview { transform: translate(26%, 1%) rotate(1.5deg) scale(.62); }
+.spotlight-scene > .hype-banner-art { position: absolute; inset: 0; min-height: 0; border-radius: 0; animation: spotlight-art-in .72s cubic-bezier(.2,.78,.2,1) both; }
+.spotlight-scene > .hype-banner-art > .hype-feed-preview { justify-self: end; margin-right: 8%; transform: rotate(1.5deg) scale(.78); }
+.collection-cover .hype-banner-art { position: absolute; inset: 0; min-height: 0; border-radius: 0; }
+.collection-cover .hype-banner-art > .hype-feed-preview { transform: rotate(1.5deg) scale(.57); }
+.active-transfer > .hype-banner-art,
+.download-status-card > .hype-banner-art,
+.download-ready-art > .hype-banner-art { width: 180px; height: 180px; min-height: 0; border-radius: 17px; }
+.active-transfer > .hype-banner-art > .hype-feed-preview,
+.download-status-card > .hype-banner-art > .hype-feed-preview,
+.download-ready-art > .hype-banner-art > .hype-feed-preview { transform: rotate(1.5deg) scale(.48); }
+.download-ready-art { overflow: visible; padding: 0; }
+.download-ready-art > svg { z-index: 4; }
+
+/* Hype release reader remains fully readable and reuses the canonical banner. */
+.game-modal-news { display: flex; flex-direction: column; }
+.game-modal-news > header { flex: none; }
+.game-modal-news .hype-news-modal { min-height: 0; max-height: min(650px, calc(100vh - 190px)); overflow-y: auto; scrollbar-color: rgba(255,79,160,.45) transparent; }
+.hype-news-modal .news-reader { min-height: 0; }
+.hype-news-modal .news-back { width: max-content; max-width: 100%; }
+.hype-release-hero { min-height: 250px; position: relative; overflow: hidden; padding: 0; }
+.hype-release-hero > .hype-banner-art { position: absolute; inset: 0; min-height: 0; border-radius: 0; }
+.hype-release-hero > .hype-banner-art > .hype-feed-preview { justify-self: end; margin-right: 3%; transform: rotate(1.5deg) scale(.56); }
+.release-hero-copy { position: relative; z-index: 2; width: 100%; min-height: 250px; padding: 26px; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(90deg, rgba(20,10,15,.97) 0%, rgba(20,10,15,.78) 44%, rgba(20,10,15,.12) 100%); }
+.hype-featured-release { position: relative; overflow: hidden; padding: 0; }
+.hype-featured-release > .hype-banner-art { position: absolute; inset: 0; max-width: none; min-height: 0; border-radius: 0; }
+.hype-featured-release > .hype-banner-art > .hype-feed-preview { justify-self: end; margin-right: 2%; transform: rotate(1.5deg) scale(.56); }
+.hype-featured-release > .release-card-copy { position: relative; z-index: 2; width: 100%; max-width: none; min-height: 225px; padding: 28px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; background: linear-gradient(90deg, rgba(20,10,15,.97) 0%, rgba(20,10,15,.76) 45%, rgba(20,10,15,.08) 100%); }
+
+/* Hover previews use exactly the same palettes as the selected game. */
+.theme-bibliotheque:has(.collection-game[data-game='laliferp']:hover) {
+  --game-accent: #007ffe;
+  --game-accent-rgb: 0,127,254;
+  --shell-base: #070b12;
+  --shell-deep: #04070b;
+  --shell-wash: 0,127,254;
+  --page-art: url('/assets/laliferp-hero.jpg');
+  --shell-art-opacity: .2;
+}
+.theme-bibliotheque:has(.collection-game[data-game='hype']:hover) {
+  --game-accent: #ff4fa0;
+  --game-accent-rgb: 255,79,160;
+  --shell-base: #110c0f;
+  --shell-deep: #090609;
+  --shell-wash: 255,79,160;
+  --page-art: url('/assets/hype-avatar.svg');
+  --shell-art-opacity: .1;
+}
+.theme-bibliotheque:has(.collection-game[data-game='laliferp']:hover) .sidebar { background: linear-gradient(180deg, rgba(8,13,20,.95), rgba(6,8,12,.85)); }
+.theme-bibliotheque:has(.collection-game[data-game='laliferp']:hover) .workspace { background: linear-gradient(110deg, rgba(6,10,16,.78), rgba(7,9,12,.27) 58%, rgba(5,10,17,.5)); }
+.theme-bibliotheque:has(.collection-game[data-game='hype']:hover) .sidebar { background: linear-gradient(180deg, rgba(24,16,21,.94), rgba(13,9,12,.86)); }
+.theme-bibliotheque:has(.collection-game[data-game='hype']:hover) .workspace { background: linear-gradient(110deg, rgba(17,12,15,.74), rgba(12,8,10,.32) 58%, rgba(19,12,16,.5)); }
+
+/* The custom title bar floats above content like native translucent chrome. */
+.launcher-shell .workspace { position: relative; }
+.launcher-shell .topbar {
+  position: absolute;
+  z-index: 80;
+  inset: 0 0 auto;
+  background: rgba(0,0,0,.62);
+  border-bottom-color: rgba(255,255,255,.06);
+  box-shadow: 0 12px 36px rgba(0,0,0,.2);
+  backdrop-filter: blur(22px) saturate(1.15);
+}
+.launcher-shell .workspace-scroll { padding-top: 73px; }
+.ui-compact .workspace-scroll { padding-top: 59px; }
+
+/* The downloads surface adopts Hype's complete game theme. */
+.theme-telechargements.theme-hype {
+  --game-accent: #ff4fa0;
+  --game-accent-rgb: 255,79,160;
+  --shell-base: #110c0f;
+  --shell-deep: #090609;
+  --shell-wash: 255,79,160;
+  --page-art: url('/assets/hype-avatar.svg');
+  --shell-art-opacity: .1;
+}
+.theme-telechargements.theme-hype .sidebar { background: linear-gradient(180deg, rgba(24,16,21,.94), rgba(13,9,12,.86)); }
+.theme-telechargements.theme-hype .workspace { background: linear-gradient(110deg, rgba(17,12,15,.74), rgba(12,8,10,.32) 58%, rgba(19,12,16,.5)); }
+
+@media (min-width: 1800px) and (min-height: 900px) {
+  .active-transfer > .hype-banner-art,
+  .download-status-card > .hype-banner-art,
+  .download-ready-art > .hype-banner-art { width: 220px; height: 220px; }
+}
+.ui-compact .active-transfer > .hype-banner-art,
+.ui-compact .download-status-card > .hype-banner-art,
+.ui-compact .download-ready-art > .hype-banner-art { width: 145px; height: 145px; }

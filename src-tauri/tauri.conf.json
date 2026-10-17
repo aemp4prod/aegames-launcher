@@ -15,8 +15,9 @@
         "title": "Æ Games Launcher",
         "width": 1500,
         "height": 940,
-        "minWidth": 1120,
-        "minHeight": 720,
+        "minWidth": 1180,
+        "minHeight": 700,
+        "decorations": false,
         "resizable": true
       }
     ],

@@ -19,6 +19,8 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 const HYPE_MANIFEST_URL: &str =
     "https://github.com/aemp4prod/aegames-hype/releases/latest/download/manifest.json";
+const HYPE_RELEASES_URL: &str =
+    "https://api.github.com/repos/aemp4prod/aegames-hype/releases?per_page=6";
 
 #[derive(Default)]
 struct HypeProcess(Mutex<Option<Child>>);
@@ -72,6 +74,30 @@ struct HypeReleaseInfo {
     download_size: u64,
     installed_size: u64,
     update_available: bool,
+}
+
+#[derive(Deserialize)]
+struct GithubHypeRelease {
+    id: u64,
+    name: Option<String>,
+    tag_name: String,
+    published_at: Option<String>,
+    body: Option<String>,
+    html_url: String,
+    prerelease: bool,
+    draft: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HypeReleaseNews {
+    id: u64,
+    name: String,
+    tag_name: String,
+    published_at: String,
+    body: String,
+    html_url: String,
+    prerelease: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -420,6 +446,41 @@ async fn check_hype_update(path: Option<String>) -> Result<HypeReleaseInfo, Stri
     })
 }
 
+#[tauri::command]
+async fn get_hype_releases() -> Result<Vec<HypeReleaseNews>, String> {
+    let releases = reqwest::Client::builder()
+        .user_agent("AE-Games-Launcher")
+        .build()
+        .map_err(|error| format!("Impossible de préparer la connexion à GitHub : {error}"))?
+        .get(HYPE_RELEASES_URL)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|error| format!("Impossible de récupérer les Releases Hype : {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("GitHub n’a pas fourni le fil des Releases Hype : {error}"))?
+        .json::<Vec<GithubHypeRelease>>()
+        .await
+        .map_err(|error| format!("Le fil des Releases Hype est invalide : {error}"))?;
+
+    Ok(releases
+        .into_iter()
+        .filter(|release| !release.draft)
+        .map(|release| HypeReleaseNews {
+            id: release.id,
+            name: release
+                .name
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| release.tag_name.clone()),
+            tag_name: release.tag_name,
+            published_at: release.published_at.unwrap_or_default(),
+            body: release.body.unwrap_or_default(),
+            html_url: release.html_url,
+            prerelease: release.prerelease,
+        })
+        .collect())
+}
+
 fn emit_hype_progress(app: &AppHandle, percentage: u8, phase: &str, downloaded: u64, total: u64) {
     let _ = app.emit(
         "hype-download-progress",
@@ -750,6 +811,97 @@ fn reveal_hype_installation(path: String) -> Result<(), String> {
     Ok(())
 }
 
+fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination)
+        .map_err(|error| format!("Impossible de créer le nouveau dossier Hype : {error}"))?;
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("Impossible de lire l’installation Hype : {error}"))?
+    {
+        let entry =
+            entry.map_err(|error| format!("Impossible de lire un fichier Hype : {error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Impossible d’inspecter un fichier Hype : {error}"))?;
+        let target = destination.join(entry.file_name());
+        if file_type.is_symlink() {
+            return Err("L’installation contient un lien symbolique et ne peut pas être déplacée en sécurité.".into());
+        }
+        if file_type.is_dir() {
+            copy_directory(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)
+                .map_err(|error| format!("Impossible de copier un fichier Hype : {error}"))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn move_hype_installation(
+    path: String,
+    process: State<'_, HypeProcess>,
+) -> Result<Option<HypeInstallReport>, String> {
+    let source = PathBuf::from(path);
+    verify_directory(&source)?;
+    if is_hype_running(process)? {
+        return Err("Fermez Hype avant de déplacer son installation.".into());
+    }
+    let source = source
+        .canonicalize()
+        .map_err(|error| format!("Impossible de sécuriser l’installation actuelle : {error}"))?;
+    let mut dialog = rfd::FileDialog::new().set_title("Choisir le nouveau dossier parent de Hype");
+    if let Some(parent) = source.parent() {
+        dialog = dialog.set_directory(parent);
+    }
+    let Some(parent) = dialog.pick_folder() else {
+        return Ok(None);
+    };
+    let parent = parent
+        .canonicalize()
+        .map_err(|error| format!("Impossible de sécuriser le dossier de destination : {error}"))?;
+    if parent.starts_with(&source) {
+        return Err(
+            "Le nouveau dossier ne peut pas se trouver dans l’installation actuelle.".into(),
+        );
+    }
+    let destination = parent.join("Hype");
+    if destination == source {
+        return Err("Hype se trouve déjà dans ce dossier.".into());
+    }
+    if destination.exists() {
+        return Err("Un dossier Hype existe déjà à cet emplacement.".into());
+    }
+
+    match fs::rename(&source, &destination) {
+        Ok(()) => match verify_directory(&destination) {
+            Ok(report) => Ok(Some(report)),
+            Err(error) => {
+                let _ = fs::rename(&destination, &source);
+                Err(format!("Le déplacement n’a pas pu être validé : {error}"))
+            }
+        },
+        Err(_) => {
+            if let Err(error) = copy_directory(&source, &destination) {
+                let _ = fs::remove_dir_all(&destination);
+                return Err(error);
+            }
+            let report = match verify_directory(&destination) {
+                Ok(report) => report,
+                Err(error) => {
+                    let _ = fs::remove_dir_all(&destination);
+                    return Err(format!("La copie n’a pas pu être validée : {error}"));
+                }
+            };
+            fs::remove_dir_all(&source).map_err(|error| {
+                format!(
+                    "La copie est valide, mais l’ancien dossier n’a pas pu être supprimé : {error}"
+                )
+            })?;
+            Ok(Some(report))
+        }
+    }
+}
+
 #[tauri::command]
 fn uninstall_hype(path: String, process: State<'_, HypeProcess>) -> Result<(), String> {
     let requested = PathBuf::from(path);
@@ -834,6 +986,7 @@ pub fn run() {
         .manage(HypeTransfer::default())
         .invoke_handler(tauri::generate_handler![
             check_hype_update,
+            get_hype_releases,
             install_hype,
             cancel_hype_download,
             select_hype_installation,
@@ -842,6 +995,7 @@ pub fn run() {
             is_hype_running,
             stop_hype,
             reveal_hype_installation,
+            move_hype_installation,
             uninstall_hype,
             select_install_directory,
             verify_launcher_installation
