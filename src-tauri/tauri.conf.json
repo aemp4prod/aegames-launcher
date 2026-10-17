@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Æ Games Launcher",
+  "version": "0.1.0",
+  "identifier": "games.ae.launcher",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Æ Games Launcher",
+        "width": 1500,
+        "height": 940,
+        "minWidth": 1120,
+        "minHeight": 720,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "publisher": "Æ Games",
+    "copyright": "Copyright © 2026 Æ Games",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["aegames"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVFQkRFRjc2MEQzMUQ1MjMKUldRajFURU5kdSs5WHNEZS85UWd3TktiWDNuckxCdWF3dVNmVW5jWG5LbGVFVVhYYUNHTjVuaXEK",
+      "endpoints": [
+        "https://github.com/aemp4prod/aegames-launcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
+
