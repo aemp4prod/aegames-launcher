@@ -48,9 +48,43 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Æ Games Launcher ${{ github.ref_name }}"
+          releaseName: "Æ Games Launcher v0.2"
           releaseBody: |
-            Première version de test du launcher Æ Games.
+            ## Une interface plus lisible et plus cohérente
+
+            - Nouvelle hiérarchie typographique appliquée à l'ensemble du launcher.
+            - Échelle de l'interface étendue jusqu'à 200 %, avec 150 % automatiquement recommandé sur les écrans 4K.
+            - Application de l'échelle au relâchement du curseur pour éviter les déplacements de fenêtre et de souris.
+            - Taille minimale de la fenêtre synchronisée avec celle de l'interface.
+            - Nouvelle barre de titre intégrée, translucide et fonctionnelle : réduction, agrandissement et fermeture.
+
+            ## Accueil et navigation
+
+            - Accueil personnalisé avec le nom d'affichage du compte.
+            - Identité Æ Games actualisée et navigation latérale simplifiée.
+            - Æ Originals apparaît maintenant avant FiveM.
+            - Nouvelle bannière Hype cohérente avec la fiche du jeu.
+
+            ## Bibliothèque
+
+            - Thème dynamique fidèle à chaque jeu, y compris au survol.
+            - Filtres Tous, Installés et À mettre à jour désormais fonctionnels.
+            - Choix entre l'affichage en liste et les cartes de type pochette.
+            - Préparation du futur système de tri.
+
+            ## Hype
+
+            - Actualités connectées au véritable fil des releases GitHub de Hype.
+            - Lecteur détaillé avec contenu complet et défilement.
+            - Identité visuelle unifiée autour de la carte sociale de la page du jeu.
+            - Nouvelle action permettant de déplacer une installation existante.
+            - Téléchargements et gestion de l'installation adaptés au thème Hype.
+
+            ## Ajustements supplémentaires
+
+            - Pilule d'amis corrigée lorsqu'aucun ami n'est en ligne.
+            - Suppression des éléments redondants dans la barre supérieure et la navigation.
+            - Nombreuses corrections d'espacement, de contraste et d'états interactifs.
 
             L'installateur n'est pas encore signé avec un certificat Windows : un avertissement SmartScreen peut apparaître pendant cette phase de test interne.
           releaseDraft: false
