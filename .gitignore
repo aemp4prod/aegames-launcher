@@ -5,7 +5,13 @@ dist/
 !.env.example
 src-tauri/target/
 src-tauri/gen/
-supabase/
+supabase/*
+!supabase/migrations/
+supabase/migrations/*
+!supabase/migrations/202610180001_social_update.sql
+!supabase/migrations/202610180002_social_presence_fixes.sql
+!supabase/migrations/202610180003_news_read_tracking.sql
+!supabase/migrations/202610180004_profile_customization.sql
 *.log
 *.tsbuildinfo
 vite.config.js

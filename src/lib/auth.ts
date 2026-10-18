@@ -9,6 +9,40 @@ export const DESKTOP_AUTH_CALLBACK = 'aegames://auth/callback';
 
 export type PresenceStatus = 'online' | 'busy' | 'invisible';
 
+export type ProfileTheme = {
+  mode: 'solid' | 'gradient';
+  background: string;
+  backgroundSecondary: string;
+  accent: string;
+  angle: number;
+  surfaceOpacity: number;
+};
+
+export const defaultProfileTheme: ProfileTheme = {
+  mode: 'gradient',
+  background: '#10111b',
+  backgroundSecondary: '#242052',
+  accent: '#8f87ff',
+  angle: 135,
+  surfaceOpacity: 76,
+};
+
+function colorValue(value: unknown, fallback: string) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
+export function normalizeProfileTheme(value: unknown): ProfileTheme {
+  const theme = value && typeof value === 'object' ? value as Partial<ProfileTheme> : {};
+  return {
+    mode: theme.mode === 'solid' ? 'solid' : 'gradient',
+    background: colorValue(theme.background, defaultProfileTheme.background),
+    backgroundSecondary: colorValue(theme.backgroundSecondary, defaultProfileTheme.backgroundSecondary),
+    accent: colorValue(theme.accent, defaultProfileTheme.accent),
+    angle: Math.min(360, Math.max(0, Number(theme.angle) || defaultProfileTheme.angle)),
+    surfaceOpacity: Math.min(94, Math.max(42, Number(theme.surfaceOpacity) || defaultProfileTheme.surfaceOpacity)),
+  };
+}
+
 export type ProfileData = {
   name: string;
   username: string;
@@ -16,6 +50,7 @@ export type ProfileData = {
   avatarDataUrl?: string;
   bannerDataUrl?: string;
   status: PresenceStatus;
+  theme: ProfileTheme;
 };
 
 const handledCodes = new Set<string>();
@@ -75,6 +110,7 @@ export function profileFromUser(user: User): ProfileData {
     bio: '',
     avatarDataUrl: textValue(metadata.avatar_url, identityData?.avatar_url),
     status: 'online',
+    theme: defaultProfileTheme,
   };
 }
 
@@ -82,7 +118,7 @@ export async function loadProfile(user: User): Promise<ProfileData> {
   const fallback = profileFromUser(user);
   const { data, error } = await supabase
     .from('profiles')
-    .select('display_name, username, bio, avatar_url, banner_data_url, presence_status')
+    .select('display_name, username, bio, avatar_url, banner_data_url, presence_status, profile_theme')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -96,6 +132,7 @@ export async function loadProfile(user: User): Promise<ProfileData> {
     avatarDataUrl: data.avatar_url || fallback.avatarDataUrl,
     bannerDataUrl: data.banner_data_url || undefined,
     status: data.presence_status === 'busy' || data.presence_status === 'invisible' ? data.presence_status : 'online',
+    theme: normalizeProfileTheme(data.profile_theme),
   };
 }
 
@@ -112,9 +149,56 @@ export async function saveProfile(user: User, profile: ProfileData) {
     avatar_url: profile.avatarDataUrl ?? null,
     banner_data_url: profile.bannerDataUrl ?? null,
     presence_status: profile.status,
+    profile_theme: normalizeProfileTheme(profile.theme),
   });
   if (error?.code === '23505') throw new Error('Ce pseudo est déjà utilisé.');
   if (error) throw error;
+}
+
+export type ProfileCustomization = {
+  displayName: string;
+  username: string;
+  bio: string;
+  avatarDataUrl?: string;
+  bannerDataUrl?: string;
+  theme: ProfileTheme;
+};
+
+export async function saveProfileCustomization(userId: string, customization: ProfileCustomization) {
+  const username = normalizeUsername(customization.username);
+  const validationError = validateUsername(username);
+  if (validationError) throw new Error(validationError);
+  if (!customization.displayName.trim()) throw new Error('Le nom d’affichage est requis.');
+  if (customization.bio.length > 3000) throw new Error('La bio ne peut pas dépasser 3 000 caractères.');
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      display_name: customization.displayName.trim().slice(0, 60),
+      username,
+      bio: customization.bio.trim(),
+      avatar_url: customization.avatarDataUrl ?? null,
+      banner_data_url: customization.bannerDataUrl ?? null,
+      profile_theme: normalizeProfileTheme(customization.theme),
+    })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error?.code === '23505') throw new Error('Ce pseudo est déjà utilisé.');
+  if (error) throw error;
+  if (!data) throw new Error('Le profil n’a pas pu être enregistré.');
+}
+
+export async function saveProfileMedia(user: User, kind: 'avatarDataUrl' | 'bannerDataUrl', dataUrl: string) {
+  const column = kind === 'avatarDataUrl' ? 'avatar_url' : 'banner_data_url';
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ [column]: dataUrl })
+    .eq('id', user.id)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('La nouvelle image n’a pas été enregistrée par Supabase.');
 }
 
 export async function isUsernameAvailable(username: string) {

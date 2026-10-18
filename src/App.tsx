@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import type { Session, User } from '@supabase/supabase-js';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
@@ -7,33 +10,43 @@ import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { launcherAdapter, type HypeDownloadProgress, type HypeInstallReport, type HypeReleaseNews } from './launcher/adapter';
 import { GamePageHero } from './components/GamePage';
-import { isUsernameAvailable, listenForAuthCallbacks, loadProfile, normalizeUsername, profileFromUser, saveProfile as saveProfileRecord, signInWithDiscord, validateUsername, type PresenceStatus, type ProfileData } from './lib/auth';
-import { loadRelationships, removeFriend, respondToFriendRequest, searchProfiles, sendFriendRequest, type FriendProfile } from './lib/friends';
+import { defaultProfileTheme, isUsernameAvailable, listenForAuthCallbacks, loadProfile, normalizeProfileTheme, normalizeUsername, profileFromUser, saveProfile as saveProfileRecord, saveProfileCustomization, saveProfileMedia, signInWithDiscord, validateUsername, type PresenceStatus, type ProfileCustomization, type ProfileData, type ProfileTheme } from './lib/auth';
+import { blockProfile, heartbeatPresence, loadBlockedProfiles, loadPublicProfile, loadRelationships, markPresenceOffline, removeFriend, respondToFriendRequest, searchProfiles, sendFriendRequest, setCurrentGame, unblockProfile, type FriendProfile, type PublicProfile } from './lib/friends';
 import { supabase } from './lib/supabase';
+import { loadReadNewsKeys, markNewsKeyRead } from './lib/news';
 import {
   Activity,
   AlertTriangle,
   ArrowLeft,
   ArrowUpDown,
+  Ban,
   Bell,
+  Bold,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
+  CalendarDays,
   Download,
   Edit3,
+  Eye,
   FolderOpen,
   Gamepad2,
   Gauge,
   Globe2,
   GripVertical,
+  Heading2,
+  Heading3,
   HardDrive,
   Heart,
   Home,
+  Italic,
   Library,
   LayoutGrid,
+  Link2,
   Lock,
   List,
+  ListOrdered,
   Maximize2,
   MessageCircle,
   Minus,
@@ -42,8 +55,11 @@ import {
   MoveRight,
   Newspaper,
   Play,
+  Palette,
+  Quote,
   RefreshCw,
   Search,
+  Save,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -51,6 +67,7 @@ import {
   Trophy,
   Trash2,
   UserPlus,
+  UserRound,
   Users,
   Volume2,
   Wifi,
@@ -59,14 +76,8 @@ import {
   X,
 } from 'lucide-react';
 
-type Page = 'accueil' | 'bibliotheque' | 'telechargements' | 'reglages' | 'laliferp' | 'hype';
+type Page = 'accueil' | 'bibliotheque' | 'telechargements' | 'reglages' | 'laliferp' | 'hype' | 'profil';
 type InstallState = 'available' | 'downloading' | 'installed';
-
-const friends = [
-  { name: 'Milo', game: 'Sur L.A LifeRP', initials: 'MI', color: '#8956ff' },
-  { name: 'Nox', game: 'Joue à Hype', initials: 'NX', color: '#ef5da8' },
-  { name: 'Luna', game: 'En ligne', initials: 'LU', color: '#4eaac8' },
-];
 
 const hypeLogoWhite = '/assets/hype-logo-white.svg';
 const hypeIcon = '/assets/hype-icon.svg';
@@ -135,27 +146,57 @@ function loadLauncherSettings(): LauncherSettings {
   } catch { return defaultLauncherSettings; }
 }
 
-function optimizeImage(file: File, maxWidth: number, quality: number): Promise<string> {
-  return new Promise((resolve, reject) => {
+type CropTarget = { source: string; kind: 'avatarDataUrl' | 'bannerDataUrl' };
+
+function readImageFile(file: File) {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Lecture impossible'));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error('Image invalide'));
-      image.onload = () => {
-        const scale = Math.min(1, maxWidth / image.width);
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-        const context = canvas.getContext('2d');
-        if (!context) return reject(new Error('Conversion impossible'));
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/webp', quality));
-      };
-      image.src = String(reader.result);
-    };
+    reader.onload = () => resolve(String(reader.result));
     reader.readAsDataURL(file);
   });
+}
+
+function renderCroppedImage(source: string, kind: CropTarget['kind'], x: number, y: number, zoom: number) {
+  return new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Image invalide'));
+    image.onload = () => {
+      const aspect = kind === 'avatarDataUrl' ? 1 : 3.5;
+      let sourceWidth = image.width;
+      let sourceHeight = image.width / aspect;
+      if (sourceHeight > image.height) {
+        sourceHeight = image.height;
+        sourceWidth = image.height * aspect;
+      }
+      sourceWidth /= zoom;
+      sourceHeight /= zoom;
+      const sourceX = (image.width - sourceWidth) * (x / 100);
+      const sourceY = (image.height - sourceHeight) * (y / 100);
+      const canvas = document.createElement('canvas');
+      canvas.width = kind === 'avatarDataUrl' ? 420 : 1400;
+      canvas.height = kind === 'avatarDataUrl' ? 420 : 400;
+      const context = canvas.getContext('2d');
+      if (!context) return reject(new Error('Conversion impossible'));
+      context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/webp', kind === 'avatarDataUrl' ? .86 : .8));
+    };
+    image.src = source;
+  });
+}
+
+function ImageCropDialog({ target, onCancel, onConfirm }: { target: CropTarget; onCancel: () => void; onConfirm: (dataUrl: string, kind: CropTarget['kind']) => void | Promise<void> }) {
+  const [x, setX] = useState(50);
+  const [y, setY] = useState(50);
+  const [zoom, setZoom] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    setBusy(true);
+    try { await onConfirm(await renderCroppedImage(target.source, target.kind, x, y, zoom), target.kind); }
+    catch { /* Le parent affiche l’erreur et conserve le dialogue ouvert. */ }
+    finally { setBusy(false); }
+  };
+  return createPortal(<div className="crop-dialog-backdrop"><section className="crop-dialog" role="dialog" aria-modal="true" aria-label="Recadrer l’image"><header><div><span>APERÇU</span><h2>Choisir le meilleur cadrage</h2></div><button aria-label="Fermer" onClick={onCancel}><X size={18} /></button></header><div className={`crop-preview ${target.kind === 'avatarDataUrl' ? 'avatar-crop' : 'banner-crop'}`}><img src={target.source} alt="Aperçu du recadrage" style={{ objectPosition: `${x}% ${y}%`, transform: `scale(${zoom})` }} /></div><div className="crop-controls"><label>Horizontal<input type="range" min="0" max="100" value={x} onChange={(event) => setX(Number(event.target.value))} /></label><label>Vertical<input type="range" min="0" max="100" value={y} onChange={(event) => setY(Number(event.target.value))} /></label><label>Zoom<input type="range" min="1" max="2.5" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label></div><footer><button onClick={onCancel}>Annuler</button><button className="crop-confirm" disabled={busy} onClick={() => void confirm()}>{busy ? 'Préparation…' : 'Utiliser ce cadrage'}</button></footer></section></div>, document.body);
 }
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -193,7 +234,7 @@ function Login({ onLogin, busy, initializing, error }: { onLogin: () => void; bu
   );
 }
 
-function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onSignOut }: { page: Page; setPage: (page: Page) => void; installState: InstallState; progress: number; hypeRunning: boolean; user: User; onSignOut: () => void }) {
+function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onSignOut, onOpenProfile }: { page: Page; setPage: (page: Page) => void; installState: InstallState; progress: number; hypeRunning: boolean; user: User; onSignOut: () => void; onOpenProfile: (userId: string) => void }) {
   const profileAreaRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -203,6 +244,7 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
   const [mediaError, setMediaError] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [usernameAvailability, setUsernameAvailability] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error'>('idle');
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const statusLabel = status === 'online' ? 'En ligne' : status === 'busy' ? 'Occupé' : 'Invisible';
   const profileInitials = profile.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'Æ';
 
@@ -218,6 +260,17 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
     });
     return () => { active = false; };
   }, [user]);
+
+  useEffect(() => {
+    const applyProfileUpdate = (event: Event) => {
+      const updated = (event as CustomEvent<ProfileData>).detail;
+      setProfile(updated);
+      setDraft(updated);
+      setStatus(updated.status);
+    };
+    window.addEventListener('ae-profile-updated', applyProfileUpdate);
+    return () => window.removeEventListener('ae-profile-updated', applyProfileUpdate);
+  }, []);
 
   useEffect(() => {
     if (!editing) {
@@ -266,9 +319,25 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
     if (!file.type.startsWith('image/')) { setMediaError('Choisissez une image valide.'); return; }
     try {
       setMediaError('');
-      const dataUrl = await optimizeImage(file, kind === 'avatarDataUrl' ? 320 : 1400, kind === 'avatarDataUrl' ? .84 : .78);
-      setDraft((current) => ({ ...current, [kind]: dataUrl }));
+      setCropTarget({ source: await readImageFile(file), kind });
     } catch { setMediaError('Cette image n’a pas pu être préparée.'); }
+  };
+
+  const applyCroppedMedia = async (dataUrl: string, kind: CropTarget['kind']) => {
+    const previousValue = profile[kind];
+    setDraft((current) => ({ ...current, [kind]: dataUrl }));
+    setProfile((current) => ({ ...current, [kind]: dataUrl }));
+    try {
+      await saveProfileMedia(user, kind, dataUrl);
+      const nextProfile = { ...profile, [kind]: dataUrl, status };
+      window.dispatchEvent(new CustomEvent<ProfileData>('ae-profile-updated', { detail: nextProfile }));
+      setMediaError('');
+    } catch (error) {
+      setDraft((current) => ({ ...current, [kind]: previousValue }));
+      setProfile((current) => ({ ...current, [kind]: previousValue }));
+      setMediaError(error instanceof Error ? error.message : 'Cette image n’a pas pu être enregistrée.');
+      throw error;
+    }
   };
 
   const saveProfileChanges = async () => {
@@ -341,13 +410,15 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
       <div className="profile-area" ref={profileAreaRef}>
         {profileOpen && (
           <section className="profile-popover">
-            <div className={`profile-banner ${editing ? 'editable-media' : ''}`} style={(editing ? draft.bannerDataUrl : profile.bannerDataUrl) ? { backgroundImage: `linear-gradient(90deg, rgba(11,12,15,.2), rgba(78,170,200,.12)), url('${editing ? draft.bannerDataUrl : profile.bannerDataUrl}')` } : undefined}>
-              {editing && <label className="profile-media-trigger banner-trigger"><Edit3 size={13} /><span>Modifier la bannière</span><input type="file" accept="image/*" aria-label="Modifier la bannière" onChange={(event) => updateProfileMedia(event.target.files?.[0], 'bannerDataUrl')} /></label>}
+            <div className={`profile-banner ${editing ? 'editable-media' : ''}`}>
+              {(editing ? draft.bannerDataUrl : profile.bannerDataUrl) && <img className="profile-banner-image" src={editing ? draft.bannerDataUrl : profile.bannerDataUrl} alt="" />}
+              <span className="profile-banner-shade" />
+              {editing && <label className="profile-media-trigger banner-trigger"><Edit3 size={13} /><span>Modifier la bannière</span><input type="file" accept="image/*" aria-label="Modifier la bannière" onChange={(event) => { const input = event.currentTarget; void updateProfileMedia(input.files?.[0], 'bannerDataUrl').finally(() => { input.value = ''; }); }} /></label>}
             </div>
             <div className="profile-summary">
               <span className={`profile-avatar ${(editing ? draft.avatarDataUrl : profile.avatarDataUrl) ? 'has-image' : ''} ${editing ? 'editable-media' : ''}`} style={(editing ? draft.avatarDataUrl : profile.avatarDataUrl) ? { backgroundImage: `url('${editing ? draft.avatarDataUrl : profile.avatarDataUrl}')` } : undefined}>
                 {!(editing ? draft.avatarDataUrl : profile.avatarDataUrl) && profileInitials}<i className={`status-${status}`} />
-                {editing && <label className="profile-media-trigger avatar-trigger" aria-label="Modifier la photo de profil"><Edit3 size={14} /><input type="file" accept="image/*" aria-label="Modifier la photo de profil" onChange={(event) => updateProfileMedia(event.target.files?.[0], 'avatarDataUrl')} /></label>}
+                {editing && <label className="profile-media-trigger avatar-trigger" aria-label="Modifier la photo de profil"><Edit3 size={14} /><input type="file" accept="image/*" aria-label="Modifier la photo de profil" onChange={(event) => { const input = event.currentTarget; void updateProfileMedia(input.files?.[0], 'avatarDataUrl').finally(() => { input.value = ''; }); }} /></label>}
               </span>
               {editing ? (
                 <div className="profile-editor">
@@ -358,10 +429,10 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
                   <div><button onClick={() => setEditing(false)}>Annuler</button><button className="save-profile" disabled={savingProfile || usernameAvailability === 'checking' || usernameAvailability === 'taken' || usernameAvailability === 'invalid'} onClick={() => void saveProfileChanges()}>{savingProfile ? 'Enregistrement…' : 'Enregistrer'}</button></div>
                 </div>
               ) : (
-                <><div className="profile-identity"><h3>{profile.name}</h3><span>@{profile.username}</span><p>{profile.bio || 'Aucune bio pour le moment.'}</p></div><button className="edit-profile" onClick={() => { setDraft(profile); setEditing(true); }}><Edit3 size={14} /> Modifier le profil</button></>
+                <div className="profile-identity"><h3>{profile.name}</h3><span>@{profile.username}</span><p>{profile.bio || 'Aucune bio pour le moment.'}</p></div>
               )}
             </div>
-            {!editing && <><div className="status-picker"><span>Statut</span><div><button className={status === 'online' ? 'active' : ''} onClick={() => void changeStatus('online')}><i className="status-online" />En ligne</button><button className={status === 'busy' ? 'active' : ''} onClick={() => void changeStatus('busy')}><i className="status-busy" />Occupé</button><button className={status === 'invisible' ? 'active' : ''} onClick={() => void changeStatus('invisible')}><i className="status-invisible" />Invisible</button></div></div><button className="profile-signout" onClick={onSignOut}>Se déconnecter</button></>}
+            {!editing && <><div className="status-picker"><span>Statut</span><div><button className={status === 'online' ? 'active' : ''} onClick={() => void changeStatus('online')}><i className="status-online" />En ligne</button><button className={status === 'busy' ? 'active' : ''} onClick={() => void changeStatus('busy')}><i className="status-busy" />Occupé</button><button className={status === 'invisible' ? 'active' : ''} onClick={() => void changeStatus('invisible')}><i className="status-invisible" />Invisible</button></div></div><button className="profile-view" onClick={() => { setProfileOpen(false); onOpenProfile(user.id); }}><UserRound size={13} /> Voir le profil</button><button className="profile-signout" onClick={onSignOut}>Se déconnecter</button></>}
           </section>
         )}
         <button className={`profile-mini ${profileOpen ? 'active' : ''}`} aria-expanded={profileOpen} onClick={() => { if (!profileOpen) window.dispatchEvent(new Event('close-topbar-menus')); setProfileOpen((open) => !open); setEditing(false); }}>
@@ -370,11 +441,55 @@ function Sidebar({ page, setPage, installState, progress, hypeRunning, user, onS
           <MoreHorizontal size={18} />
         </button>
       </div>
+      {cropTarget && <ImageCropDialog target={cropTarget} onCancel={() => setCropTarget(null)} onConfirm={async (dataUrl, kind) => { await applyCroppedMedia(dataUrl, kind); setCropTarget(null); }} />}
     </aside>
   );
 }
 
-function Topbar({ setPage }: { setPage: (page: Page) => void }) {
+function friendCategory(friend: FriendProfile): 'playing' | 'online' | 'offline' {
+  if (friend.currentGame) return 'playing';
+  if (friend.presenceStatus !== 'invisible') return 'online';
+  return 'offline';
+}
+
+function FriendAvatar({ friend, compact = false }: { friend: FriendProfile; compact?: boolean }) {
+  const offline = friendCategory(friend) === 'offline';
+  return <span className={`${compact ? 'friend-avatar' : 'friend-list-avatar'} ${friend.avatarUrl ? 'has-photo' : ''} ${offline ? 'is-offline' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}<i className={friend.currentGame ? 'status-playing' : `status-${friend.presenceStatus}`} /></span>;
+}
+
+function FriendActions({ friend, open, busy, onToggle, onProfile, onDelete, onBlock, triggerLabel, showProfile = true }: { friend: FriendProfile; open: boolean; busy: boolean; onToggle: (event: React.MouseEvent) => void; onProfile: () => void; onDelete: () => void; onBlock: () => void; triggerLabel?: string; showProfile?: boolean }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const menuHeight = 116;
+      setPosition({
+        top: rect.bottom + menuHeight > window.innerHeight ? Math.max(8, rect.top - menuHeight - 5) : rect.bottom + 5,
+        left: Math.max(8, Math.min(window.innerWidth - 184, rect.right - 176)),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open]);
+  return <div className={`friend-row-menu ${triggerLabel ? 'labelled' : ''}`}><button ref={buttonRef} aria-label={`Actions pour ${friend.displayName}`} onClick={onToggle}>{triggerLabel ? <><Settings size={14} /> {triggerLabel}</> : <MoreHorizontal size={18} />}</button>{open && createPortal(<div className="friend-context-menu" style={{ ...position, visibility: position.left ? 'visible' : 'hidden' }} onClick={(event) => event.stopPropagation()}>{showProfile && <button onClick={onProfile}><UserRound size={14} /> Ouvrir le profil</button>}<button className="danger" disabled={busy} onClick={onDelete}><Trash2 size={14} /> Supprimer</button><button className="danger" disabled={busy} onClick={onBlock}><Ban size={14} /> Bloquer</button></div>, document.body)}</div>;
+}
+
+function SocialFriendSections({ friends: friendList, compact = false, menuId, busyId, onMenu, onProfile, onDelete, onBlock }: { friends: FriendProfile[]; compact?: boolean; menuId: string | null; busyId: string | null; onMenu: (id: string | null) => void; onProfile: (friend: FriendProfile) => void; onDelete: (friend: FriendProfile) => void; onBlock: (friend: FriendProfile) => void }) {
+  const groups = [
+    { id: 'playing', label: 'En jeu', items: friendList.filter((friend) => friendCategory(friend) === 'playing') },
+    { id: 'online', label: 'En ligne', items: friendList.filter((friend) => friendCategory(friend) === 'online') },
+    { id: 'offline', label: 'Hors ligne', items: friendList.filter((friend) => friendCategory(friend) === 'offline') },
+  ];
+  if (!friendList.length) return <p className={compact ? 'drawer-empty' : 'friend-dialog-empty'}>Votre liste d’amis est encore vide.</p>;
+  return <div className={`social-friend-sections ${compact ? 'compact' : ''}`}>{groups.map((group) => group.items.length > 0 && <section key={group.id} className={`social-friend-group ${group.id}`}><div className="friend-section-title"><h3>{group.label}</h3><span>{group.items.length}</span></div>{group.items.map((friend) => <article className="social-friend-row" key={friend.userId} onClick={() => onProfile(friend)}><FriendAvatar friend={friend} compact={compact} /><span className="social-friend-copy"><b>{friend.displayName}</b><small>{friend.currentGame || (friend.presenceStatus === 'busy' ? 'Occupé' : group.id === 'online' ? 'Disponible' : `@${friend.username}`)}</small></span><FriendActions friend={friend} open={menuId === friend.userId} busy={busyId === friend.userId} onToggle={(event) => { event.stopPropagation(); onMenu(menuId === friend.userId ? null : friend.userId); }} onProfile={() => onProfile(friend)} onDelete={() => onDelete(friend)} onBlock={() => onBlock(friend)} /></article>)}</section>)}</div>;
+}
+
+function Topbar({ setPage, onOpenProfile }: { setPage: (page: Page) => void; onOpenProfile: (userId: string) => void }) {
   const topbarRef = useRef<HTMLElement>(null);
   const [openPanel, setOpenPanel] = useState<'friends' | 'notifications' | null>(null);
   const [query, setQuery] = useState('');
@@ -382,6 +497,7 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
   const [hasUnread, setHasUnread] = useState(true);
   const [friendDialog, setFriendDialog] = useState<'search' | 'list' | null>(null);
   const [relationships, setRelationships] = useState<FriendProfile[]>([]);
+  const [blockedProfiles, setBlockedProfiles] = useState<FriendProfile[]>([]);
   const [friendQuery, setFriendQuery] = useState('');
   const [friendResults, setFriendResults] = useState<FriendProfile[]>([]);
   const [friendLoading, setFriendLoading] = useState(false);
@@ -391,12 +507,14 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
   const acceptedFriends = relationships.filter((friend) => friend.relationshipStatus === 'accepted');
   const incomingRequests = relationships.filter((friend) => friend.relationshipStatus === 'pending' && friend.direction === 'incoming');
   const onlineFriends = acceptedFriends.filter((friend) => friend.presenceStatus !== 'invisible');
-  const searchItems: Array<{ label: string; detail: string; page?: Page; type: string; art?: string }> = [
+  const categoryOrder = { playing: 0, online: 1, offline: 2 };
+  const sortedFriends = [...acceptedFriends].sort((a, b) => categoryOrder[friendCategory(a)] - categoryOrder[friendCategory(b)] || a.displayName.localeCompare(b.displayName));
+  const searchItems: Array<{ label: string; detail: string; page?: Page; userId?: string; type: string; art?: string }> = [
     { label: 'L.A LifeRP', detail: 'Jeu FiveM', page: 'laliferp', type: 'Jeu', art: '/assets/laliferp-cover.png' },
     { label: 'Hype', detail: 'Æ Originals', page: 'hype', type: 'Jeu', art: hypeIcon },
     { label: 'Bibliothèque', detail: 'Vos jeux', page: 'bibliotheque', type: 'Page' },
     { label: 'Téléchargements', detail: 'Installations et mises à jour', page: 'telechargements', type: 'Page' },
-    ...acceptedFriends.map((friend) => ({ label: friend.displayName, detail: `@${friend.username}`, type: 'Ami', art: friend.avatarUrl })),
+    ...acceptedFriends.map((friend) => ({ label: friend.displayName, detail: `@${friend.username}`, userId: friend.userId, type: 'Ami', art: friend.avatarUrl })),
   ];
   const results = query.trim() ? searchItems.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query.toLowerCase())) : [];
 
@@ -410,6 +528,7 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
     };
     const closeMenus = () => { setOpenPanel(null); setSearchOpen(false); };
     const closeOnOutsideClick = (event: PointerEvent) => {
+      if ((event.target as Element | null)?.closest?.('.friend-context-menu')) return;
       if (!topbarRef.current?.contains(event.target as Node)) closeMenus();
     };
     window.addEventListener('keydown', handleShortcut);
@@ -421,13 +540,34 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
   const refreshRelationships = async () => {
     try {
       setFriendError('');
-      setRelationships(await loadRelationships());
+      const [friends, blocked] = await Promise.all([
+        loadRelationships(),
+        loadBlockedProfiles().catch(() => []),
+      ]);
+      setRelationships(friends);
+      setBlockedProfiles(blocked);
     } catch (error) {
       setFriendError(error instanceof Error ? error.message : 'Les amis n’ont pas pu être chargés.');
     }
   };
 
-  useEffect(() => { void refreshRelationships(); }, []);
+  useEffect(() => {
+    void refreshRelationships();
+    let timer = 0;
+    const scheduleRefresh = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void refreshRelationships(), 120);
+    };
+    const channel = supabase.channel('launcher-social-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profile_blocks' }, scheduleRefresh)
+      .subscribe();
+    window.addEventListener('ae-profile-updated', scheduleRefresh);
+    window.addEventListener('focus', scheduleRefresh);
+    const fallback = window.setInterval(scheduleRefresh, 30000);
+    return () => { window.clearTimeout(timer); window.clearInterval(fallback); window.removeEventListener('ae-profile-updated', scheduleRefresh); window.removeEventListener('focus', scheduleRefresh); void supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     if (friendDialog !== 'search' || friendQuery.trim().length < 2) {
@@ -498,9 +638,41 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
     }
   };
 
+  const blockFriend = async (friend: FriendProfile) => {
+    setFriendBusyId(friend.userId);
+    try {
+      await blockProfile(friend.userId);
+      setFriendMenuId(null);
+      await refreshRelationships();
+    } catch (error) {
+      setFriendError(error instanceof Error ? error.message : 'Ce profil n’a pas pu être bloqué.');
+    } finally {
+      setFriendBusyId(null);
+    }
+  };
+
+  const unblockFriend = async (friend: FriendProfile) => {
+    setFriendBusyId(friend.userId);
+    try {
+      await unblockProfile(friend.userId);
+      await refreshRelationships();
+    } catch (error) {
+      setFriendError(error instanceof Error ? error.message : 'Ce profil n’a pas pu être débloqué.');
+    } finally {
+      setFriendBusyId(null);
+    }
+  };
+
+  const openProfile = (friend: FriendProfile) => {
+    setFriendMenuId(null);
+    setFriendDialog(null);
+    setOpenPanel(null);
+    onOpenProfile(friend.userId);
+  };
+
   const selectResult = (item: (typeof searchItems)[number]) => {
     if (item.page) setPage(item.page);
-    else setOpenPanel('friends');
+    else if (item.userId) onOpenProfile(item.userId);
     setQuery('');
     setSearchOpen(false);
   };
@@ -516,11 +688,11 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
         {searchOpen && query && <div className="search-results">{results.length ? results.map((item) => <button key={`${item.type}-${item.label}`} onClick={() => selectResult(item)}><span className={`search-result-icon ${item.art ? 'has-art' : ''}`}>{item.art ? <img src={item.art} alt="" /> : <Library size={16} />}</span><span><b>{item.label}</b><small>{item.detail}</small></span><em>{item.type}</em></button>) : <p>Aucun résultat pour « {query} »</p>}</div>}
       </div>
       <div className="topbar-menu-wrap">
-        <button className={`party-peek ${openPanel === 'friends' ? 'active' : ''}`} aria-label="Voir les amis en ligne" aria-expanded={openPanel === 'friends'} onClick={() => { window.dispatchEvent(new Event('close-profile-menu')); setOpenPanel(openPanel === 'friends' ? null : 'friends'); setSearchOpen(false); if (openPanel !== 'friends') void refreshRelationships(); }}>
-          {onlineFriends.length > 0 && <span className="party-avatars">{onlineFriends.slice(0, 3).map((friend) => <i key={friend.userId} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 1).toUpperCase()}</i>)}</span>}
-          <span><b>{onlineFriends.length} ami{onlineFriends.length === 1 ? '' : 's'}</b><small>en ligne</small></span>
+        <button className={`party-peek ${openPanel === 'friends' ? 'active' : ''}`} aria-label="Voir mes amis" aria-expanded={openPanel === 'friends'} onClick={() => { window.dispatchEvent(new Event('close-profile-menu')); setOpenPanel(openPanel === 'friends' ? null : 'friends'); setSearchOpen(false); if (openPanel !== 'friends') void refreshRelationships(); }}>
+          {sortedFriends.length > 0 && <span className="party-avatars">{sortedFriends.slice(0, 3).map((friend) => <i className={friendCategory(friend) === 'offline' ? 'is-offline' : ''} key={friend.userId} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 1).toUpperCase()}</i>)}</span>}
+          <span><b>{acceptedFriends.length} ami{acceptedFriends.length === 1 ? '' : 's'}</b><small>{onlineFriends.length} en ligne</small></span>
         </button>
-        {openPanel === 'friends' && <div className="topbar-drawer friends-drawer"><div className="drawer-heading"><div><h3>Amis en ligne</h3><span>{onlineFriends.length} sur {acceptedFriends.length}</span></div><button aria-label="Ajouter un ami" onClick={() => openFriendDialog('search')}>+</button></div>{onlineFriends.length ? onlineFriends.slice(0, 5).map((friend) => <div className="drawer-friend" key={friend.userId}><span className={`friend-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}<i /></span><span><b>{friend.displayName}</b><small>@{friend.username}</small></span></div>) : <p className="drawer-empty">Aucun ami en ligne pour le moment.</p>}{incomingRequests.length > 0 && <button className="drawer-requests" onClick={() => openFriendDialog('list')}>{incomingRequests.length} demande{incomingRequests.length > 1 ? 's' : ''} en attente</button>}{friendError && <p className="drawer-feedback">{friendError}</p>}<button className="drawer-footer" onClick={() => openFriendDialog('list')}>Voir mes amis <ChevronRight size={14} /></button></div>}
+        {openPanel === 'friends' && <div className="topbar-drawer friends-drawer" onClick={() => setFriendMenuId(null)}><div className="drawer-heading"><div><h3>Mes amis</h3><span>{onlineFriends.length} en ligne · {acceptedFriends.length} au total</span></div><button className="drawer-add-friend" aria-label="Ajouter un ami" onClick={() => openFriendDialog('search')}>+</button></div><SocialFriendSections friends={sortedFriends} compact menuId={friendMenuId} busyId={friendBusyId} onMenu={setFriendMenuId} onProfile={openProfile} onDelete={(friend) => void deleteFriend(friend)} onBlock={(friend) => void blockFriend(friend)} />{incomingRequests.length > 0 && <button className="drawer-requests" onClick={() => openFriendDialog('list')}>{incomingRequests.length} demande{incomingRequests.length > 1 ? 's' : ''} en attente</button>}{blockedProfiles.length > 0 && <button className="drawer-requests blocked" onClick={() => openFriendDialog('list')}><Ban size={12} /> {blockedProfiles.length} profil{blockedProfiles.length > 1 ? 's' : ''} bloqué{blockedProfiles.length > 1 ? 's' : ''}</button>}{friendError && <p className="drawer-feedback">{friendError}</p>}<button className="drawer-footer" onClick={() => openFriendDialog('list')}>Voir mes amis <ChevronRight size={14} /></button></div>}
       </div>
       <div className="topbar-menu-wrap">
         <button className={`icon-button ${openPanel === 'notifications' ? 'active' : ''}`} aria-label="Notifications" aria-expanded={openPanel === 'notifications'} onClick={() => { window.dispatchEvent(new Event('close-profile-menu')); setOpenPanel(openPanel === 'notifications' ? null : 'notifications'); setSearchOpen(false); }}><Bell size={18} />{hasUnread && <i />}</button>
@@ -528,8 +700,316 @@ function Topbar({ setPage }: { setPage: (page: Page) => void }) {
       </div>
       <div className="window-buttons"><button aria-label="Réduire" onClick={minimizeWindow}><Minus size={15} /></button><button aria-label="Agrandir ou restaurer" onClick={toggleMaximizeWindow}><Maximize2 size={13} /></button><button aria-label="Fermer" onClick={closeWindow}><X size={15} /></button></div>
     </header>
-    {friendDialog && createPortal(<div className="friend-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFriendDialog(null); }}><section className={`friend-dialog ${friendDialog === 'list' ? 'friend-dialog-large' : ''}`} role="dialog" aria-modal="true" aria-label={friendDialog === 'search' ? 'Ajouter un ami' : 'Mes amis'} onClick={() => setFriendMenuId(null)}><header><div><span>RÉSEAU Æ GAMES</span><h2>{friendDialog === 'search' ? 'Ajouter un ami' : 'Mes amis'}</h2></div><button aria-label="Fermer" onClick={() => setFriendDialog(null)}><X size={18} /></button></header>{friendDialog === 'search' ? <div className="friend-search-content"><label><Search size={17} /><input autoFocus value={friendQuery} onChange={(event) => setFriendQuery(event.target.value)} placeholder="Nom d’affichage ou @pseudo" /></label><p className="friend-search-hint">Saisissez au moins deux caractères.</p><div className="friend-search-results">{friendLoading && <p className="friend-dialog-empty">Recherche en cours…</p>}{!friendLoading && friendQuery.trim().length >= 2 && !friendResults.length && !friendError && <p className="friend-dialog-empty">Aucun joueur trouvé.</p>}{friendResults.map((friend) => <article key={friend.userId}><span className={`friend-list-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}</span><div><b>{friend.displayName}</b><small>@{friend.username}</small></div>{friend.relationshipStatus === 'accepted' ? <button disabled><Check size={14} /> Ami</button> : friend.direction === 'outgoing' ? <button disabled>Demande envoyée</button> : <button disabled={friendBusyId === friend.userId} onClick={() => void requestFriend(friend)}><UserPlus size={14} />{friend.direction === 'incoming' ? 'Accepter' : 'Ajouter'}</button>}</article>)}</div>{friendError && <p className="friend-dialog-error">{friendError}</p>}</div> : <div className="friend-list-content">{incomingRequests.length > 0 && <section className="friend-request-section"><div className="friend-section-title"><h3>Demandes reçues</h3><span>{incomingRequests.length}</span></div>{incomingRequests.map((friend) => <article key={friend.userId}><span className={`friend-list-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}</span><div><b>{friend.displayName}</b><small>@{friend.username}</small></div><div className="friend-request-actions"><button disabled={friendBusyId === friend.userId} onClick={() => void respondToRequest(friend, false)}>Refuser</button><button className="accept" disabled={friendBusyId === friend.userId} onClick={() => void respondToRequest(friend, true)}>Accepter</button></div></article>)}</section>}<section><div className="friend-section-title"><h3>Liste d’amis</h3><span>{acceptedFriends.length}</span></div>{acceptedFriends.length ? acceptedFriends.map((friend) => <article key={friend.userId}><span className={`friend-list-avatar ${friend.avatarUrl ? 'has-photo' : ''}`} style={friend.avatarUrl ? { backgroundImage: `url('${friend.avatarUrl}')` } : undefined}>{!friend.avatarUrl && friend.displayName.slice(0, 2).toUpperCase()}<i className={`status-${friend.presenceStatus}`} /></span><div><b>{friend.displayName}</b><small>@{friend.username} · {friend.presenceStatus === 'online' ? 'En ligne' : friend.presenceStatus === 'busy' ? 'Occupé' : 'Hors ligne'}</small></div><div className="friend-row-menu"><button aria-label={`Actions pour ${friend.displayName}`} onClick={(event) => { event.stopPropagation(); setFriendMenuId(friendMenuId === friend.userId ? null : friend.userId); }}><MoreHorizontal size={18} /></button>{friendMenuId === friend.userId && <div onClick={(event) => event.stopPropagation()}><button disabled={friendBusyId === friend.userId} onClick={() => void deleteFriend(friend)}><Trash2 size={14} /> Supprimer des amis</button></div>}</div></article>) : <p className="friend-dialog-empty">Votre liste d’amis est encore vide.</p>}</section>{friendError && <p className="friend-dialog-error">{friendError}</p>}</div>}</section></div>, document.body)}
+    {friendDialog && createPortal(<div className="friend-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFriendDialog(null); }}><section className={`friend-dialog ${friendDialog === 'list' ? 'friend-dialog-large' : ''}`} role="dialog" aria-modal="true" aria-label={friendDialog === 'search' ? 'Ajouter un ami' : 'Mes amis'} onClick={() => setFriendMenuId(null)}><header><div><span>RÉSEAU Æ GAMES</span><h2>{friendDialog === 'search' ? 'Ajouter un ami' : 'Mes amis'}</h2></div><button aria-label="Fermer" onClick={() => setFriendDialog(null)}><X size={18} /></button></header>{friendDialog === 'search' ? <div className="friend-search-content"><label><Search size={17} /><input autoFocus value={friendQuery} onChange={(event) => setFriendQuery(event.target.value)} placeholder="Nom d’affichage ou @pseudo" /></label><p className="friend-search-hint">Saisissez au moins deux caractères.</p><div className="friend-search-results">{friendLoading && <p className="friend-dialog-empty">Recherche en cours…</p>}{!friendLoading && friendQuery.trim().length >= 2 && !friendResults.length && !friendError && <p className="friend-dialog-empty">Aucun joueur trouvé.</p>}{friendResults.map((friend) => <article key={friend.userId} onClick={() => openProfile(friend)}><FriendAvatar friend={friend} /><div><b>{friend.displayName}</b><small>@{friend.username}</small></div>{friend.relationshipStatus === 'accepted' ? <button disabled><Check size={14} /> Ami</button> : friend.direction === 'outgoing' ? <button disabled>Demande envoyée</button> : <button disabled={friendBusyId === friend.userId} onClick={(event) => { event.stopPropagation(); void requestFriend(friend); }}><UserPlus size={14} />{friend.direction === 'incoming' ? 'Accepter' : 'Ajouter'}</button>}</article>)}</div>{friendError && <p className="friend-dialog-error">{friendError}</p>}</div> : <div className="friend-list-content">{incomingRequests.length > 0 && <section className="friend-request-section"><div className="friend-section-title"><h3>Demandes reçues</h3><span>{incomingRequests.length}</span></div>{incomingRequests.map((friend) => <article key={friend.userId}><FriendAvatar friend={friend} /><div><b>{friend.displayName}</b><small>@{friend.username}</small></div><div className="friend-request-actions"><button disabled={friendBusyId === friend.userId} onClick={() => void respondToRequest(friend, false)}>Refuser</button><button className="accept" disabled={friendBusyId === friend.userId} onClick={() => void respondToRequest(friend, true)}>Accepter</button></div></article>)}</section>}<SocialFriendSections friends={sortedFriends} menuId={friendMenuId} busyId={friendBusyId} onMenu={setFriendMenuId} onProfile={openProfile} onDelete={(friend) => void deleteFriend(friend)} onBlock={(friend) => void blockFriend(friend)} />{blockedProfiles.length > 0 && <section className="blocked-profiles-section"><div className="friend-section-title"><h3>Profils bloqués</h3><span>{blockedProfiles.length}</span></div><p>Ces joueurs restent masqués de votre réseau jusqu’à leur déblocage.</p>{blockedProfiles.map((friend) => <article key={friend.userId}><FriendAvatar friend={friend} /><div><b>{friend.displayName}</b><small>@{friend.username}</small></div><button disabled={friendBusyId === friend.userId} onClick={() => void unblockFriend(friend)}>Débloquer</button></article>)}</section>}{friendError && <p className="friend-dialog-error">{friendError}</p>}</div>}</section></div>, document.body)}
     </>
+  );
+}
+
+function ProfileMarkdown({ children }: { children: string }) {
+  return (
+    <div className="profile-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}
+      >
+        {children}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+const profileThemePresets: { name: string; theme: ProfileTheme }[] = [
+  { name: 'Nébuleuse', theme: defaultProfileTheme },
+  { name: 'Minuit', theme: { mode: 'gradient', background: '#07131a', backgroundSecondary: '#123743', accent: '#65d9f2', angle: 145, surfaceOpacity: 72 } },
+  { name: 'Velours', theme: { mode: 'gradient', background: '#180b14', backgroundSecondary: '#4a1633', accent: '#ff6dab', angle: 125, surfaceOpacity: 74 } },
+  { name: 'Solaire', theme: { mode: 'gradient', background: '#1d1108', backgroundSecondary: '#563015', accent: '#ffb45f', angle: 155, surfaceOpacity: 78 } },
+];
+
+function MarkdownBioEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [preview, setPreview] = useState(false);
+  const format = (prefix: string, suffix = '', placeholder = 'texte') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selection = value.slice(start, end) || placeholder;
+    const next = value.slice(0, start) + prefix + selection + suffix + value.slice(end);
+    onChange(next);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selection.length);
+    });
+  };
+  const prefixLines = (prefix: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selection = value.slice(start, end) || 'Nouvel élément';
+    const transformed = selection.split('\n').map((line, index) => prefix === '1. ' ? String(index + 1) + '. ' + line : prefix + line).join('\n');
+    onChange(value.slice(0, start) + transformed + value.slice(end));
+    window.requestAnimationFrame(() => textarea.focus());
+  };
+  return (
+    <div className="markdown-editor">
+      <div className="markdown-toolbar">
+        <button type="button" aria-label="Gras" title="Gras" onClick={() => format('**', '**')}><Bold size={15} /></button>
+        <button type="button" aria-label="Italique" title="Italique" onClick={() => format('*', '*')}><Italic size={15} /></button>
+        <span />
+        <button type="button" aria-label="Grand titre" title="Grand titre" onClick={() => prefixLines('## ')}><Heading2 size={15} /></button>
+        <button type="button" aria-label="Petit titre" title="Petit titre" onClick={() => prefixLines('### ')}><Heading3 size={15} /></button>
+        <span />
+        <button type="button" aria-label="Liste" title="Liste" onClick={() => prefixLines('- ')}><List size={15} /></button>
+        <button type="button" aria-label="Liste numérotée" title="Liste numérotée" onClick={() => prefixLines('1. ')}><ListOrdered size={15} /></button>
+        <button type="button" aria-label="Citation" title="Citation" onClick={() => prefixLines('> ')}><Quote size={15} /></button>
+        <button type="button" aria-label="Lien" title="Lien" onClick={() => format('[', '](https://)', 'libellé')}><Link2 size={15} /></button>
+        <button type="button" className={preview ? 'active preview-toggle' : 'preview-toggle'} onClick={() => setPreview((current) => !current)}><Eye size={15} /> {preview ? 'Éditer' : 'Aperçu'}</button>
+      </div>
+      {preview
+        ? <div className="markdown-preview"><ProfileMarkdown>{value || '*Votre bio apparaîtra ici.*'}</ProfileMarkdown></div>
+        : <textarea ref={textareaRef} value={value} maxLength={3000} spellCheck onChange={(event) => onChange(event.target.value)} placeholder="Racontez votre histoire avec Markdown…" />}
+      <small>{value.length} / 3 000 caractères</small>
+    </div>
+  );
+}
+
+function ProfileCustomizer({
+  draft,
+  setDraft,
+  originalUsername,
+  usernameAvailability,
+  busy,
+  error,
+  onClose,
+  onSave,
+  onChooseMedia,
+}: {
+  draft: ProfileCustomization;
+  setDraft: React.Dispatch<React.SetStateAction<ProfileCustomization>>;
+  originalUsername: string;
+  usernameAvailability: 'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error';
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: () => void;
+  onChooseMedia: (file: File | undefined, kind: CropTarget['kind']) => void;
+}) {
+  const [section, setSection] = useState<'content' | 'theme'>('content');
+  const usernameChanged = normalizeUsername(draft.username) !== originalUsername;
+  return createPortal(
+    <div className="profile-customizer-backdrop" style={{ '--profile-accent': draft.theme.accent } as React.CSSProperties} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="profile-customizer" role="dialog" aria-modal="true" aria-label="Personnaliser le profil">
+        <header>
+          <div><span>STUDIO DE PROFIL</span><h2>Personnaliser votre espace</h2><p>Les changements de thème sont visibles en direct derrière cet éditeur.</p></div>
+          <button aria-label="Fermer" onClick={onClose}><X size={18} /></button>
+        </header>
+        <nav>
+          <button className={section === 'content' ? 'active' : ''} onClick={() => setSection('content')}><Edit3 size={15} /> Contenu</button>
+          <button className={section === 'theme' ? 'active' : ''} onClick={() => setSection('theme')}><Palette size={15} /> Apparence</button>
+        </nav>
+        <div className="profile-customizer-content">
+          {section === 'content' ? <>
+            <div className="profile-editor-grid">
+              <label>Nom d’affichage<input value={draft.displayName} maxLength={60} onChange={(event) => setDraft((current) => ({ ...current, displayName: event.target.value }))} /></label>
+              <label>Pseudo<div className="username-field"><span>@</span><input value={draft.username} maxLength={24} autoCapitalize="none" autoCorrect="off" spellCheck={false} onChange={(event) => setDraft((current) => ({ ...current, username: normalizeUsername(event.target.value) }))} /></div><small className={'username-feedback ' + usernameAvailability}>{!usernameChanged ? 'Votre pseudo actuel' : usernameAvailability === 'checking' ? 'Vérification…' : usernameAvailability === 'available' ? 'Pseudo disponible' : usernameAvailability === 'taken' ? 'Ce pseudo est déjà utilisé' : usernameAvailability === 'invalid' ? '2 à 24 caractères : lettres, chiffres, . et _' : usernameAvailability === 'error' ? 'Vérification indisponible' : ''}</small></label>
+            </div>
+            <div className="profile-media-editor">
+              <div className="profile-media-sample banner" style={draft.bannerDataUrl ? { backgroundImage: 'url("' + draft.bannerDataUrl + '")' } : undefined}><span>Bannière</span><label><Edit3 size={14} /> Recadrer ou remplacer<input type="file" accept="image/*" onChange={(event) => { const input = event.currentTarget; onChooseMedia(input.files?.[0], 'bannerDataUrl'); input.value = ''; }} /></label></div>
+              <div className="profile-media-sample avatar" style={draft.avatarDataUrl ? { backgroundImage: 'url("' + draft.avatarDataUrl + '")' } : undefined}><span>Photo</span><label><Edit3 size={14} /> Modifier<input type="file" accept="image/*" onChange={(event) => { const input = event.currentTarget; onChooseMedia(input.files?.[0], 'avatarDataUrl'); input.value = ''; }} /></label></div>
+            </div>
+            <label className="bio-editor-label"><span>Bio Markdown</span><MarkdownBioEditor value={draft.bio} onChange={(bio) => setDraft((current) => ({ ...current, bio }))} /></label>
+          </> : <>
+            <div className="theme-presets">
+              <span>Ambiances</span>
+              <div>{profileThemePresets.map((preset) => <button key={preset.name} className={JSON.stringify(draft.theme) === JSON.stringify(preset.theme) ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, theme: { ...preset.theme } }))}><i style={{ background: 'linear-gradient(135deg, ' + preset.theme.background + ', ' + preset.theme.backgroundSecondary + ')' }} /><b>{preset.name}</b></button>)}</div>
+            </div>
+            <div className="theme-controls">
+              <label>Type de fond<select value={draft.theme.mode} onChange={(event) => setDraft((current) => ({ ...current, theme: { ...current.theme, mode: event.target.value as ProfileTheme['mode'] } }))}><option value="gradient">Dégradé</option><option value="solid">Couleur unie</option></select></label>
+              <label>Couleur principale<span><input type="color" value={draft.theme.background} onChange={(event) => setDraft((current) => ({ ...current, theme: { ...current.theme, background: event.target.value } }))} /><code>{draft.theme.background}</code></span></label>
+              <label className={draft.theme.mode === 'solid' ? 'disabled' : ''}>Deuxième couleur<span><input type="color" disabled={draft.theme.mode === 'solid'} value={draft.theme.backgroundSecondary} onChange={(event) => setDraft((current) => ({ ...current, theme: { ...current.theme, backgroundSecondary: event.target.value } }))} /><code>{draft.theme.backgroundSecondary}</code></span></label>
+              <label>Couleur d’accent<span><input type="color" value={draft.theme.accent} onChange={(event) => setDraft((current) => ({ ...current, theme: { ...current.theme, accent: event.target.value } }))} /><code>{draft.theme.accent}</code></span></label>
+              <label className={draft.theme.mode === 'solid' ? 'disabled range-control' : 'range-control'}>Direction du dégradé<span><input type="range" min="0" max="360" disabled={draft.theme.mode === 'solid'} value={draft.theme.angle} onChange={(event) => setDraft((current) => ({ ...current, theme: { ...current.theme, angle: Number(event.target.value) } }))} /><code>{draft.theme.angle}°</code></span></label>
+              <label className="range-control">Opacité des cartes<span><input type="range" min="42" max="94" value={draft.theme.surfaceOpacity} onChange={(event) => setDraft((current) => ({ ...current, theme: { ...current.theme, surfaceOpacity: Number(event.target.value) } }))} /><code>{draft.theme.surfaceOpacity} %</code></span></label>
+            </div>
+          </>}
+        </div>
+        <footer>{error && <p>{error}</p>}<button onClick={onClose}>Annuler</button><button className="save-customization" disabled={busy || usernameAvailability === 'checking' || usernameAvailability === 'taken' || usernameAvailability === 'invalid'} onClick={onSave}><Save size={15} /> {busy ? 'Enregistrement…' : 'Enregistrer le profil'}</button></footer>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function PublicProfilePage({ userId, viewerId, onBack }: { userId: string; viewerId: string; onBack: () => void }) {
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [customizationError, setCustomizationError] = useState('');
+  const [usernameAvailability, setUsernameAvailability] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error'>('idle');
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
+  const [draft, setDraft] = useState<ProfileCustomization>({ displayName: '', username: '', bio: '', theme: defaultProfileTheme });
+
+  const load = async () => {
+    try { setError(''); setProfile(await loadPublicProfile(userId)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Le profil n’a pas pu être chargé.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => {
+    setLoading(true);
+    void load();
+    const channel = supabase.channel('public-profile-' + userId).on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: 'id=eq.' + userId }, () => void load()).on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => void load()).subscribe();
+    const fallback = window.setInterval(() => void load(), 30000);
+    return () => { window.clearInterval(fallback); void supabase.removeChannel(channel); };
+  }, [userId]);
+  useEffect(() => {
+    if (!manageOpen) return;
+    const closeManageMenu = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target?.closest('.friend-context-menu') && !target?.closest('.friend-row-menu')) setManageOpen(false);
+    };
+    document.addEventListener('pointerdown', closeManageMenu);
+    return () => document.removeEventListener('pointerdown', closeManageMenu);
+  }, [manageOpen]);
+  useEffect(() => {
+    if (!customizing || !profile) return;
+    const username = normalizeUsername(draft.username);
+    if (username === profile.username) { setUsernameAvailability('available'); return; }
+    if (validateUsername(username)) { setUsernameAvailability('invalid'); return; }
+    let active = true;
+    setUsernameAvailability('checking');
+    const timer = window.setTimeout(() => void isUsernameAvailable(username).then((available) => {
+      if (active) setUsernameAvailability(available ? 'available' : 'taken');
+    }).catch(() => { if (active) setUsernameAvailability('error'); }), 350);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [customizing, draft.username, profile]);
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    try { await action(); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Cette action n’a pas pu être effectuée.'); }
+    finally { setBusy(false); }
+  };
+  const beginCustomization = () => {
+    if (!profile) return;
+    setDraft({
+      displayName: profile.displayName,
+      username: profile.username,
+      bio: profile.bio,
+      avatarDataUrl: profile.avatarUrl,
+      bannerDataUrl: profile.bannerUrl,
+      theme: normalizeProfileTheme(profile.theme),
+    });
+    setCustomizationError('');
+    setCustomizing(true);
+  };
+  const chooseMedia = async (file: File | undefined, kind: CropTarget['kind']) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setCustomizationError('Choisissez une image valide.'); return; }
+    try { setCropTarget({ source: await readImageFile(file), kind }); }
+    catch { setCustomizationError('Cette image n’a pas pu être préparée.'); }
+  };
+  const saveCustomization = async () => {
+    if (!profile) return;
+    setBusy(true);
+    setCustomizationError('');
+    try {
+      await saveProfileCustomization(userId, draft);
+      const updatedProfile: ProfileData = {
+        name: draft.displayName.trim(),
+        username: normalizeUsername(draft.username),
+        bio: draft.bio.trim(),
+        avatarDataUrl: draft.avatarDataUrl,
+        bannerDataUrl: draft.bannerDataUrl,
+        status: profile.presenceStatus,
+        theme: normalizeProfileTheme(draft.theme),
+      };
+      window.dispatchEvent(new CustomEvent<ProfileData>('ae-profile-updated', { detail: updatedProfile }));
+      setCustomizing(false);
+      await load();
+    } catch (reason) {
+      setCustomizationError(reason instanceof Error ? reason.message : 'Le profil n’a pas pu être enregistré.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return <main className="public-profile-page profile-state"><RefreshCw className="spinning" size={22} /> Chargement du profil…</main>;
+  if (!profile) return <main className="public-profile-page profile-state"><AlertTriangle size={22} /><b>Profil indisponible</b><p>{error}</p><button onClick={onBack}>Retour</button></main>;
+
+  const ownProfile = userId === viewerId;
+  const presence = profile.currentGame ? 'En jeu · ' + profile.currentGame : profile.presenceStatus === 'online' ? 'En ligne' : profile.presenceStatus === 'busy' ? 'Occupé' : 'Hors ligne';
+  const memberSince = profile.createdAt ? new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(profile.createdAt)) : 'récemment';
+  const displayedTheme = normalizeProfileTheme(customizing ? draft.theme : profile.theme);
+  const secondColor = displayedTheme.mode === 'solid' ? displayedTheme.background : displayedTheme.backgroundSecondary;
+  const profileStyle = {
+    '--profile-accent': displayedTheme.accent,
+    '--profile-surface-opacity': displayedTheme.surfaceOpacity / 100,
+    background: 'linear-gradient(' + displayedTheme.angle + 'deg, ' + displayedTheme.background + ', ' + secondColor + ')',
+  } as React.CSSProperties;
+  const displayedBanner = customizing ? draft.bannerDataUrl : profile.bannerUrl;
+  const displayedAvatar = customizing ? draft.avatarDataUrl : profile.avatarUrl;
+  const displayedName = customizing ? draft.displayName : profile.displayName;
+  const displayedUsername = customizing ? draft.username : profile.username;
+  const displayedBio = customizing ? draft.bio : profile.bio;
+  const themedProfile = { ...profile, avatarUrl: displayedAvatar };
+
+  return (
+    <main className="public-profile-page profile-theme-canvas" style={profileStyle}>
+      <button className="profile-back" onClick={onBack}><ArrowLeft size={15} /> Retour</button>
+      <section className="public-profile-hero">
+        <div className="public-profile-banner">{displayedBanner && <img src={displayedBanner} alt="" />}<span /></div>
+        <div className="public-profile-head">
+          <FriendAvatar friend={themedProfile} />
+          <div><span className="profile-presence"><i className={profile.currentGame ? 'status-playing' : 'status-' + profile.presenceStatus} />{presence}</span><h1>{displayedName}</h1><p>@{displayedUsername}</p></div>
+          <div className="public-profile-actions">
+            {ownProfile
+              ? <button className="profile-customize-action" onClick={beginCustomization}><Palette size={15} /> Personnaliser</button>
+              : profile.relationshipStatus === 'accepted'
+                ? <FriendActions friend={profile} open={manageOpen} busy={busy} triggerLabel="Gérer" showProfile={false} onToggle={(event) => { event.stopPropagation(); setManageOpen((open) => !open); }} onProfile={() => undefined} onDelete={() => { setManageOpen(false); void run(() => removeFriend(profile.userId)); }} onBlock={() => { setManageOpen(false); void run(async () => { await blockProfile(profile.userId); onBack(); }); }} />
+                : profile.direction === 'outgoing'
+                  ? <button disabled>Demande envoyée</button>
+                  : <button className="primary" disabled={busy} onClick={() => void run(() => sendFriendRequest(profile.userId))}><UserPlus size={15} />{profile.direction === 'incoming' ? 'Accepter la demande' : 'Ajouter en ami'}</button>}
+          </div>
+        </div>
+      </section>
+
+      <div className="public-profile-grid">
+        <section className="public-profile-main">
+          <article className="profile-about">
+            <header><div><span>À PROPOS</span><h2>L’espace de {displayedName}</h2></div><i style={{ background: displayedTheme.accent }} /></header>
+            <ProfileMarkdown>{displayedBio || '*' + displayedName + ' n’a pas encore ajouté de bio.*'}</ProfileMarkdown>
+          </article>
+          <article className="profile-activity">
+            <div><span>ACTIVITÉ ACTUELLE</span><h2>{profile.currentGame ? 'En pleine session' : 'Entre deux aventures'}</h2><p>{profile.currentGame ? displayedName + ' joue actuellement depuis le launcher.' : 'La prochaine session apparaîtra ici dès qu’un jeu sera lancé.'}</p></div>
+            {profile.currentGame
+              ? <div className={'activity-game ' + (profile.currentGame === 'Hype' ? 'hype' : 'lalife')}><img src={profile.currentGame === 'Hype' ? hypeIcon : '/assets/laliferp-cover.png'} alt="" /><span><b>{profile.currentGame}</b><small>Session active</small></span><i>EN JEU</i></div>
+              : <div className="profile-idle-orbit"><Gamepad2 size={23} /><span><b>Hors jeu</b><small>Disponible sur Æ Games</small></span></div>}
+          </article>
+          <article className="profile-showcase">
+            <div className="profile-section-heading"><div><span>VITRINE</span><h2>Ses univers</h2></div><small>Bibliothèque Æ Games</small></div>
+            <div className="profile-universe-grid">
+              <div className="profile-universe life"><img src="/assets/laliferp-cover.png" alt="" /><span><small>FIVEM · ROLEPLAY</small><b>L.A LifeRP</b><em>{profile.currentGame === 'L.A LifeRP' ? 'Joue maintenant' : 'Dans la bibliothèque'}</em></span></div>
+              <div className="profile-universe hype"><img src={hypeIcon} alt="" /><span><small>Æ ORIGINALS</small><b>Hype</b><em>{profile.currentGame === 'Hype' ? 'Joue maintenant' : 'Dans la bibliothèque'}</em></span></div>
+            </div>
+          </article>
+        </section>
+
+        <aside className="public-profile-side">
+          <article className="profile-glance-card"><span>EN UN COUP D’ŒIL</span><div><p><Users size={17} /><strong>{profile.friendCount}</strong><small>ami{profile.friendCount === 1 ? '' : 's'}</small></p><p><CalendarDays size={17} /><strong>{memberSince}</strong><small>membre depuis</small></p></div></article>
+          <article className="profile-presence-card"><span>PRÉSENCE</span><div><i className={profile.currentGame ? 'status-playing' : 'status-' + profile.presenceStatus} /><p><b>{presence}</b><small>{profile.currentGame ? 'Activité partagée en temps réel' : 'Statut du réseau Æ Games'}</small></p></div></article>
+          <article className="profile-signature-card"><span>SIGNATURE VISUELLE</span><h3>Un profil à son image.</h3><p>Cette ambiance a été choisie par {displayedName}.</p><div><i style={{ background: displayedTheme.background }} /><i style={{ background: secondColor }} /><i style={{ background: displayedTheme.accent }} /></div></article>
+          {!ownProfile && profile.relationshipStatus !== 'accepted' && <button className="profile-block-action" disabled={busy} onClick={() => void run(async () => { await blockProfile(profile.userId); onBack(); })}><Ban size={14} /> Bloquer ce profil</button>}
+        </aside>
+      </div>
+
+      {error && <p className="public-profile-error">{error}</p>}
+      {customizing && <ProfileCustomizer draft={draft} setDraft={setDraft} originalUsername={profile.username} usernameAvailability={usernameAvailability} busy={busy} error={customizationError} onClose={() => { setCustomizing(false); setCustomizationError(''); }} onSave={() => void saveCustomization()} onChooseMedia={(file, kind) => void chooseMedia(file, kind)} />}
+      {cropTarget && <ImageCropDialog target={cropTarget} onCancel={() => setCropTarget(null)} onConfirm={async (dataUrl, kind) => { setDraft((current) => ({ ...current, [kind]: dataUrl })); setCropTarget(null); }} />}
+    </main>
   );
 }
 
@@ -539,12 +1019,22 @@ function Stat({ icon, label, value, detail }: { icon: React.ReactNode; label: st
 
 function HomePage({ setPage, user }: { setPage: (page: Page) => void; user: User }) {
   const [displayName, setDisplayName] = useState(() => profileFromUser(user).name);
+  const [socialStats, setSocialStats] = useState({ online: 0, total: 0 });
   useEffect(() => {
     let active = true;
     const handleProfileUpdate = (event: Event) => setDisplayName((event as CustomEvent<ProfileData>).detail.name);
+    const refreshSocialStats = () => void loadRelationships().then((items) => {
+      if (!active) return;
+      const accepted = items.filter((friend) => friend.relationshipStatus === 'accepted');
+      setSocialStats({ total: accepted.length, online: accepted.filter((friend) => friend.presenceStatus !== 'invisible').length });
+    }).catch(() => undefined);
     window.addEventListener('ae-profile-updated', handleProfileUpdate);
+    window.addEventListener('focus', refreshSocialStats);
     void loadProfile(user).then((profile) => { if (active) setDisplayName(profile.name); }).catch(() => undefined);
-    return () => { active = false; window.removeEventListener('ae-profile-updated', handleProfileUpdate); };
+    refreshSocialStats();
+    const channel = supabase.channel('home-social-stats').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refreshSocialStats).on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, refreshSocialStats).subscribe();
+    const fallback = window.setInterval(refreshSocialStats, 30000);
+    return () => { active = false; window.clearInterval(fallback); window.removeEventListener('ae-profile-updated', handleProfileUpdate); window.removeEventListener('focus', refreshSocialStats); void supabase.removeChannel(channel); };
   }, [user]);
   return (
     <div className="page-with-friends">
@@ -559,7 +1049,7 @@ function HomePage({ setPage, user }: { setPage: (page: Page) => void; user: User
         <section className="stats-grid">
           <Stat icon={<Clock3 />} label="TEMPS DE JEU" value="127 h" detail="Tous les jeux" />
           <Stat icon={<Trophy />} label="SUCCÈS" value="24 / 58" detail="41 % terminés" />
-          <Stat icon={<Users />} label="AMIS EN LIGNE" value="3" detail="sur 18 amis" />
+          <Stat icon={<Users />} label="AMIS EN LIGNE" value={String(socialStats.online)} detail={`sur ${socialStats.total} ami${socialStats.total === 1 ? '' : 's'}`} />
           <Stat icon={<Gauge />} label="LATENCE" value="18 ms" detail="Excellente" />
         </section>
         <div className="section-heading"><div><h2>Bibliothèque</h2></div><button onClick={() => setPage('bibliotheque')}>Tout afficher <ChevronRight size={15} /></button></div>
@@ -581,15 +1071,16 @@ function HypeArtwork({ compact = false }: { compact?: boolean }) {
 }
 
 type GamePanel = 'achievements' | 'friends' | 'options' | 'news';
+type NewsReadProps = { readNewsKeys: Set<string>; onMarkNewsRead: (newsKey: string) => void };
 
-function GameDock({ label, icon, onPrimary, onPanel, showNews = false, friendCount = 3, primaryDanger = false }: { label: string; icon: React.ReactNode; onPrimary: () => void; onPanel?: (panel: GamePanel) => void; showNews?: boolean; friendCount?: number; primaryDanger?: boolean }) {
+function GameDock({ label, icon, onPrimary, onPanel, showNews = false, friendCount = 0, unreadNewsCount = 0, primaryDanger = false }: { label: string; icon: React.ReactNode; onPrimary: () => void; onPanel?: (panel: GamePanel) => void; showNews?: boolean; friendCount?: number; unreadNewsCount?: number; primaryDanger?: boolean }) {
   return (
     <nav className="game-dock" aria-label="Actions du jeu">
       <button className={`dock-primary ${primaryDanger ? 'stop-game' : ''}`} onClick={onPrimary}>{icon}<span>{label}</span></button>
       <span className="dock-divider" />
       <button onClick={() => onPanel?.('achievements')}><Trophy size={18} /><small>Succès</small></button>
-      <button onClick={() => onPanel?.('friends')}><Users size={18} /><small>Amis</small><i className="dock-notice">{friendCount}</i></button>
-      {showNews && <button onClick={() => onPanel?.('news')}><Newspaper size={18} /><small>Actualités</small><i className="dock-notice news-notice">2</i></button>}
+      <button onClick={() => onPanel?.('friends')}><Users size={18} /><small>Amis</small>{friendCount > 0 && <i className="dock-notice">{friendCount}</i>}</button>
+      {showNews && <button onClick={() => onPanel?.('news')}><Newspaper size={18} /><small>Actualités</small>{unreadNewsCount > 0 && <i className="dock-notice news-notice">{unreadNewsCount}</i>}</button>}
       <button onClick={() => onPanel?.('options')}><Settings size={18} /><small>Options</small></button>
     </nav>
   );
@@ -615,7 +1106,32 @@ const lifeNews: NewsItem[] = [
   { id: 5, date: '05 OCTOBRE', category: 'PATCH', title: 'Correctifs de stabilité', excerpt: 'Améliorations réseau et correctifs de véhicules.', body: ['Ce correctif améliore la stabilité des longues sessions et réduit les désynchronisations de véhicules.', 'Plusieurs anomalies signalées par la communauté ont également été corrigées.'] },
 ];
 
-function LifeRpModal({ panel, onClose }: { panel: GamePanel; onClose: () => void }) {
+function useGameFriendCount(game: string) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const refresh = () => void loadRelationships().then((items) => setCount(items.filter((friend) => friend.relationshipStatus === 'accepted' && friend.currentGame === game).length)).catch(() => undefined);
+    refresh();
+    const channel = supabase.channel(`game-friend-count-${game}`).on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refresh).subscribe();
+    const fallback = window.setInterval(refresh, 30000);
+    return () => { window.clearInterval(fallback); void supabase.removeChannel(channel); };
+  }, [game]);
+  return count;
+}
+
+function GameFriendsPanel({ game, onOpenProfile }: { game: string; onOpenProfile: (userId: string) => void }) {
+  const [items, setItems] = useState<FriendProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const refresh = () => void loadRelationships().then((friends) => setItems(friends.filter((friend) => friend.relationshipStatus === 'accepted' && friend.currentGame === game))).finally(() => setLoading(false));
+    refresh();
+    const channel = supabase.channel(`game-friends-${game}`).on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refresh).subscribe();
+    const fallback = window.setInterval(refresh, 30000);
+    return () => { window.clearInterval(fallback); void supabase.removeChannel(channel); };
+  }, [game]);
+  return <div className="modal-content friends-modal"><p className="modal-intro">Les amis actuellement présents sur {game} apparaissent ici en temps réel.</p>{loading ? <p className="friend-dialog-empty">Synchronisation…</p> : items.length ? items.map((friend) => <article key={friend.userId} onClick={() => onOpenProfile(friend.userId)}><FriendAvatar friend={friend} /><div><b>{friend.displayName}</b><small>@{friend.username} · Session active</small></div><button>Voir le profil</button></article>) : <p className="friend-dialog-empty">Aucun ami ne joue à {game} pour le moment.</p>}</div>;
+}
+
+function LifeRpModal({ panel, onClose, onOpenProfile, onMarkNewsRead }: { panel: GamePanel; onClose: () => void; onOpenProfile: (userId: string) => void } & Pick<NewsReadProps, 'onMarkNewsRead'>) {
   const [achievementFilter, setAchievementFilter] = useState<AchievementFilter>('all');
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [fiveMPath, setFiveMPath] = useState('');
@@ -623,6 +1139,9 @@ function LifeRpModal({ panel, onClose }: { panel: GamePanel; onClose: () => void
   const [cacheSelection, setCacheSelection] = useState<string[]>(['cache', 'server-cache']);
   const [cacheFeedback, setCacheFeedback] = useState('');
   const [installedPacks, setInstalledPacks] = useState<string[]>([]);
+  useEffect(() => {
+    if (selectedNews) onMarkNewsRead(`laliferp:${selectedNews.id}`);
+  }, [onMarkNewsRead, selectedNews]);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', closeOnEscape);
@@ -660,7 +1179,7 @@ function LifeRpModal({ panel, onClose }: { panel: GamePanel; onClose: () => void
       <section className={`game-modal game-modal-${panel}`} role="dialog" aria-modal="true" aria-label={title}>
         <header><div><span>L.A LIFERP</span><h2>{title}</h2></div><button aria-label="Fermer" onClick={onClose}><X size={18} /></button></header>
         {panel === 'achievements' && <div className="modal-content achievements-modal"><div className="achievement-dashboard"><article><span><Trophy size={17} /></span><div><small>Tous les succès</small><strong>32</strong></div></article><article><span><Check size={17} /></span><div><small>Débloqués</small><strong>16</strong></div></article><article><span><Activity size={17} /></span><div><small>En cours</small><strong>5</strong></div></article><article><span><Gauge size={17} /></span><div><small>Progression</small><strong>50 %</strong></div></article></div><div className="achievement-filter">{([['all', 'Tous'], ['unlocked', 'Débloqués'], ['progress', 'En cours'], ['locked', 'Verrouillés']] as [AchievementFilter, string][]).map(([filter, label]) => <button key={filter} className={achievementFilter === filter ? 'active' : ''} onClick={() => setAchievementFilter(filter)}>{label}</button>)}</div><div className="achievement-catalog">{visibleAchievements.map((achievement) => <article className={`achievement-entry ${achievement.state}`} key={achievement.title}><span>{achievement.icon}</span><div className="achievement-copy"><b>{achievement.title}</b><small>{achievement.description}</small>{achievement.state === 'progress' && <div className="achievement-item-progress"><i><em style={{ width: `${achievement.progress}%` }} /></i><strong>{achievement.progressLabel}</strong></div>}</div><em>{achievement.rarity}</em>{achievement.state === 'unlocked' ? <Check size={17} /> : achievement.state === 'locked' ? <span className="achievement-lock">?</span> : <span className="achievement-percent">{Math.round(achievement.progress)} %</span>}</article>)}</div></div>}
-        {panel === 'friends' && <div className="modal-content friends-modal"><p className="modal-intro">Seuls les amis actuellement présents sur L.A LifeRP apparaissent ici.</p>{friends.filter((friend) => friend.game === 'Sur L.A LifeRP').map((friend) => <article key={friend.name}><span className="mock-friend-avatar" style={{ background: friend.color }}>{friend.initials}</span><div><b>{friend.name}</b><small>Centre-ville · Session publique</small></div><span className="friend-playing"><i /> En jeu</span></article>)}</div>}
+        {panel === 'friends' && <GameFriendsPanel game="L.A LifeRP" onOpenProfile={onOpenProfile} />}
         {panel === 'news' && <div className="modal-content news-modal">{selectedNews ? <article className="news-reader"><button className="news-back" onClick={() => setSelectedNews(null)}><ArrowLeft size={15} /> Retour aux actualités</button><div className="news-reader-hero"><span>{selectedNews.category}</span><h3>{selectedNews.title}</h3><small>{selectedNews.date}</small></div><div className="news-reader-body"><p className="lead">{selectedNews.excerpt}</p>{selectedNews.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div></article> : <div className="news-feed"><button className="featured-news" onClick={() => setSelectedNews(lifeNews[0])}><div><span>{lifeNews[0].category}</span><h3>{lifeNews[0].title}</h3><p>{lifeNews[0].excerpt}</p><em>Lire l’article <ChevronRight size={15} /></em></div></button><div className="news-grid">{lifeNews.slice(1).map((item) => <button key={item.id} onClick={() => setSelectedNews(item)}><small>{item.date} · {item.category}</small><b>{item.title}</b><p>{item.excerpt}</p><em>Ouvrir <ChevronRight size={12} /></em></button>)}</div></div>}</div>}
         {panel === 'options' && <div className="modal-content options-modal"><section className="option-section"><div className="option-section-heading"><span><FolderOpen size={18} /></span><div><h3>Installation FiveM</h3><p>Sélectionnez le dossier <b>FiveM.app</b> pour activer les outils du launcher.</p></div></div><div className={`option-path ${fiveMPath ? 'configured' : ''}`}><span>Chemin d’accès</span><input aria-label="Chemin FiveM.app" value={fiveMPath} placeholder="Aucun dossier configuré" onChange={(event) => setFiveMPath(event.target.value)} /><button onClick={pickFiveMFolder}>Parcourir</button></div><div className="cache-action"><div><b>Maintenance locale</b><small>{fiveMPath ? 'Libérez de l’espace sans toucher à vos données de jeu.' : 'Configurez FiveM.app pour accéder à la maintenance.'}</small></div><button disabled={!fiveMPath} onClick={() => { setCacheFeedback(''); setCacheOpen(true); }}><Trash2 size={14} /> Vider le cache</button></div></section><section className={`option-section packs-section ${!fiveMPath ? 'section-disabled' : ''}`}><div className="option-section-heading"><span><Download size={18} /></span><div><h3>Gestion des packs</h3><p>Installez ou retirez les améliorations compatibles avec le serveur.</p></div></div><div className="pack-grid">{packs.map((pack) => { const installed = installedPacks.includes(pack.id); return <article className="pack-card" key={pack.id}><div className="pack-card-head"><img src={pack.image} alt="" /><span>{pack.size}</span></div><h4>{pack.title}</h4><p>{pack.description}</p><button disabled={!fiveMPath} className={installed ? 'remove-pack' : ''} onClick={() => togglePack(pack.id)}>{installed ? <><Trash2 size={13} /> Supprimer</> : <><Download size={13} /> Télécharger</>}</button></article>; })}</div></section>{cacheOpen && <div className="cache-modal-layer"><section className="cache-modal" role="dialog" aria-modal="true" aria-label="Vider le cache"><header><div><span>MAINTENANCE</span><h3>Vider le cache</h3></div><button aria-label="Fermer" onClick={() => setCacheOpen(false)}><X size={16} /></button></header><p>Sélectionnez les données temporaires à supprimer. Les fichiers essentiels du jeu seront conservés.</p><button className="select-all" onClick={() => setCacheSelection(cacheSelection.length === cacheFolders.length ? [] : cacheFolders.map((folder) => folder.id))}>{cacheSelection.length === cacheFolders.length ? 'Tout désélectionner' : 'Tout sélectionner'}</button><div className="cache-list">{cacheFolders.map((folder) => <label key={folder.id}><input type="checkbox" checked={cacheSelection.includes(folder.id)} onChange={() => toggleCacheFolder(folder.id)} /><span><b>{folder.label}</b><small>{folder.size}</small></span></label>)}</div>{cacheFeedback ? <p className="cache-feedback"><Check size={14} /> {cacheFeedback}</p> : <button className="clear-cache" disabled={!cacheSelection.length} onClick={() => setCacheFeedback(`${cacheSelection.length} dossier${cacheSelection.length > 1 ? 's' : ''} sélectionné${cacheSelection.length > 1 ? 's' : ''} pour suppression`)}><Trash2 size={14} /> Supprimer la sélection</button>}</section></div>}</div>}
       </section>
@@ -686,13 +1205,16 @@ function LaunchSequence({ game, artwork }: { game: string; artwork: string }) {
   );
 }
 
-function LifeRpPage() {
+function LifeRpPage({ onGameLaunch, onOpenProfile, readNewsKeys, onMarkNewsRead }: { onGameLaunch: (game: string) => void; onOpenProfile: (userId: string) => void } & NewsReadProps) {
   const [launched, setLaunched] = useState(false);
   const [openPanel, setOpenPanel] = useState<GamePanel | null>(null);
   const launch = () => {
     setLaunched(true);
+    onGameLaunch('L.A LifeRP');
     window.setTimeout(() => setLaunched(false), 1900);
   };
+  const gameFriendCount = useGameFriendCount('L.A LifeRP');
+  const unreadNewsCount = lifeNews.filter((item) => !readNewsKeys.has(`laliferp:${item.id}`)).length;
   return (
     <main className="game-page">
       <GamePageHero
@@ -722,9 +1244,9 @@ function LifeRpPage() {
           <div className="info-card"><h3>À propos</h3><p>Une expérience roleplay exigeante au cœur d'un Los Angeles vivant, façonné par ses citoyens.</p><div><span>Développeur</span><b>L.A LifeRP</b></div><div><span>Genre</span><b>Roleplay</b></div><div><span>Version</span><b>2.8.4</b></div></div>
         </aside>
       </section>
-      <GameDock label={launched ? 'Connexion…' : 'Jouer'} icon={<Play size={19} fill="currentColor" />} onPrimary={launch} onPanel={setOpenPanel} showNews friendCount={1} />
+      <GameDock label={launched ? 'Connexion…' : 'Jouer'} icon={<Play size={19} fill="currentColor" />} onPrimary={launch} onPanel={setOpenPanel} showNews friendCount={gameFriendCount} unreadNewsCount={unreadNewsCount} />
       {launched && <LaunchSequence game="L.A LifeRP" artwork="/assets/laliferp-hero.jpg" />}
-      {openPanel && <LifeRpModal panel={openPanel} onClose={() => setOpenPanel(null)} />}
+      {openPanel && <LifeRpModal panel={openPanel} onClose={() => setOpenPanel(null)} onOpenProfile={(userId) => { setOpenPanel(null); onOpenProfile(userId); }} onMarkNewsRead={onMarkNewsRead} />}
     </main>
   );
 }
@@ -1107,13 +1629,20 @@ function releaseExcerpt(release: HypeReleaseNews) {
   return paragraph.length > 180 ? `${paragraph.slice(0, 177).trim()}…` : paragraph;
 }
 
-function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePanel; onClose: () => void } & HypeInstallationActions) {
+function ReleaseMarkdown({ body }: { body: string }) {
+  return <div className="release-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{body || '*Aucune note de version détaillée.*'}</ReactMarkdown></div>;
+}
+
+function HypeModal({ panel, onClose, onOpenProfile, onMarkNewsRead, ...installationActions }: { panel: GamePanel; onClose: () => void; onOpenProfile: (userId: string) => void } & HypeInstallationActions & Pick<NewsReadProps, 'onMarkNewsRead'>) {
   const [settings, setSettings] = useState({ notifications: true, animations: true, matureTopics: false });
   const [optionsSection, setOptionsSection] = useState<'general' | 'installation'>('installation');
   const [releases, setReleases] = useState<HypeReleaseNews[]>([]);
   const [selectedRelease, setSelectedRelease] = useState<HypeReleaseNews | null>(null);
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [releaseError, setReleaseError] = useState('');
+  useEffect(() => {
+    if (selectedRelease) onMarkNewsRead(`hype:${selectedRelease.id}`);
+  }, [onMarkNewsRead, selectedRelease]);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', closeOnEscape);
@@ -1139,8 +1668,8 @@ function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePane
       <section className={`game-modal hype-game-modal game-modal-${panel}`} role="dialog" aria-modal="true" aria-label={title}>
         <header><div><img src={hypeLogoWhite} alt="Hype" /><h2>{title}</h2></div><button aria-label="Fermer" onClick={onClose}><X size={18} /></button></header>
         {panel === 'achievements' && <div className="modal-content achievements-modal"><div className="achievement-dashboard"><article><span><Trophy size={17} /></span><div><small>Tous</small><strong>18</strong></div></article><article><span><Check size={17} /></span><div><small>Débloqués</small><strong>6</strong></div></article><article><span><Activity size={17} /></span><div><small>En cours</small><strong>4</strong></div></article><article><span><Gauge size={17} /></span><div><small>Progression</small><strong>33 %</strong></div></article></div><div className="achievement-catalog"><article className="achievement-entry unlocked"><span><Heart size={18} /></span><div className="achievement-copy"><b>Premier crush</b><small>Créer votre première vraie connexion</small></div><em>68,2 %</em><Check size={17} /></article><article className="achievement-entry progress"><span><UserPlus size={18} /></span><div className="achievement-copy"><b>Ça commence à prendre</b><small>Atteindre 1 000 abonnés</small><div className="achievement-item-progress"><i><em style={{ width: '62%' }} /></i><strong>620 / 1 000</strong></div></div><em>24,1 %</em><span className="achievement-percent">62 %</span></article><article className="achievement-entry locked"><span><Globe2 size={18} /></span><div className="achievement-copy"><b>Tout le monde en parle</b><small>Lancer une tendance mondiale</small></div><em>1,7 %</em><span className="achievement-lock">?</span></article></div></div>}
-        {panel === 'friends' && <div className="modal-content friends-modal"><p className="modal-intro">Les amis qui façonnent actuellement leur histoire dans Hype.</p>{friends.filter((friend) => friend.game === 'Joue à Hype').map((friend) => <article key={friend.name}><span className="mock-friend-avatar" style={{ background: friend.color }}>{friend.initials}</span><div><b>{friend.name}</b><small>En ligne · Monde « Après minuit »</small></div><span className="friend-playing"><i /> En jeu</span></article>)}</div>}
-        {panel === 'news' && <div className="modal-content hype-news-modal">{releaseLoading && <div className="hype-release-state"><RefreshCw className="spinning" size={19} /><span><b>Chargement des Releases GitHub</b><small>Récupération du fil officiel de Hype…</small></span></div>}{releaseError && <div className="hype-release-state error"><AlertTriangle size={19} /><span><b>Actualités indisponibles</b><small>{releaseError}</small></span></div>}{!releaseLoading && !releaseError && selectedRelease && <article className="news-reader"><button className="news-back" onClick={() => setSelectedRelease(null)}><ArrowLeft size={15} /> Retour aux actualités</button><div className="news-reader-hero hype-release-hero"><HypeArtwork compact /><div className="release-hero-copy"><span>{selectedRelease.prerelease ? 'PRÉVERSION' : selectedRelease.tagName}</span><h3>{selectedRelease.name}</h3><small>{formatReleaseDate(selectedRelease.publishedAt)}</small></div></div><div className="news-reader-body">{releaseParagraphs(selectedRelease.body).map((paragraph, index) => <p className={index === 0 ? 'lead' : undefined} key={`${selectedRelease.id}-${index}`}>{paragraph}</p>)}</div></article>}{!releaseLoading && !releaseError && !selectedRelease && releases.length > 0 && <div className="news-feed hype-release-feed"><button className="featured-news hype-featured-release" onClick={() => setSelectedRelease(releases[0])}><HypeArtwork compact /><div className="release-card-copy"><span>{releases[0].tagName}</span><h3>{releases[0].name}</h3><p>{releaseExcerpt(releases[0])}</p><em>Lire les notes <ChevronRight size={15} /></em></div></button><div className="news-grid">{releases.slice(1).map((release) => <button key={release.id} onClick={() => setSelectedRelease(release)}><small>{formatReleaseDate(release.publishedAt)} · {release.prerelease ? 'PRÉVERSION' : 'ACTUALITÉ'}</small><b>{release.name}</b><p>{releaseExcerpt(release)}</p><em>Ouvrir <ChevronRight size={12} /></em></button>)}</div></div>}{!releaseLoading && !releaseError && releases.length === 0 && <div className="hype-release-state"><Newspaper size={19} /><span><b>Aucune actualité publiée</b><small>Les futures versions de Hype apparaîtront ici.</small></span></div>}</div>}
+        {panel === 'friends' && <GameFriendsPanel game="Hype" onOpenProfile={onOpenProfile} />}
+        {panel === 'news' && <div className="modal-content hype-news-modal">{releaseLoading && <div className="hype-release-state"><RefreshCw className="spinning" size={19} /><span><b>Chargement des Releases GitHub</b><small>Récupération du fil officiel de Hype…</small></span></div>}{releaseError && <div className="hype-release-state error"><AlertTriangle size={19} /><span><b>Actualités indisponibles</b><small>{releaseError}</small></span></div>}{!releaseLoading && !releaseError && selectedRelease && <article className="news-reader"><button className="news-back" onClick={() => setSelectedRelease(null)}><ArrowLeft size={15} /> Retour aux actualités</button><div className="news-reader-hero hype-release-hero"><HypeArtwork compact /><div className="release-hero-copy"><span>{selectedRelease.prerelease ? 'PRÉVERSION' : selectedRelease.tagName}</span><h3>{selectedRelease.name}</h3><small>{formatReleaseDate(selectedRelease.publishedAt)}</small></div></div><div className="news-reader-body"><ReleaseMarkdown body={selectedRelease.body} /></div></article>}{!releaseLoading && !releaseError && !selectedRelease && releases.length > 0 && <div className="news-feed hype-release-feed"><button className="featured-news hype-featured-release" onClick={() => setSelectedRelease(releases[0])}><HypeArtwork compact /><div className="release-card-copy"><span>{releases[0].tagName}</span><h3>{releases[0].name}</h3><p>{releaseExcerpt(releases[0])}</p><em>Lire les notes <ChevronRight size={15} /></em></div></button><div className="news-grid">{releases.slice(1).map((release) => <button key={release.id} onClick={() => setSelectedRelease(release)}><small>{formatReleaseDate(release.publishedAt)} · {release.prerelease ? 'PRÉVERSION' : 'ACTUALITÉ'}</small><b>{release.name}</b><p>{releaseExcerpt(release)}</p><em>Ouvrir <ChevronRight size={12} /></em></button>)}</div></div>}{!releaseLoading && !releaseError && releases.length === 0 && <div className="hype-release-state"><Newspaper size={19} /><span><b>Aucune actualité publiée</b><small>Les futures versions de Hype apparaîtront ici.</small></span></div>}</div>}
         {panel === 'options' && <div className="hype-options-layout"><nav><button className={optionsSection === 'general' ? 'active' : ''} onClick={() => setOptionsSection('general')}><Settings size={16} /><span><b>Général</b><small>Expérience de jeu</small></span></button><button className={optionsSection === 'installation' ? 'active' : ''} onClick={() => setOptionsSection('installation')}><HardDrive size={16} /><span><b>Installation</b><small>Version et fichiers</small></span></button></nav><div className="hype-options-content">{optionsSection === 'general' ? <div className="modal-content options-modal"><div className="option-block"><span><b>Notifications sociales</b><small>Afficher les nouveaux messages, réactions et abonnements.</small></span><button aria-label="Notifications sociales" aria-pressed={settings.notifications} className={settings.notifications ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, notifications: !settings.notifications })}><i /></button></div><div className="option-block"><span><b>Animations de l’interface</b><small>Conserver les transitions et réactions du fil.</small></span><button aria-label="Animations de l’interface" aria-pressed={settings.animations} className={settings.animations ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, animations: !settings.animations })}><i /></button></div><div className="option-block"><span><b>Thèmes sensibles</b><small>Autoriser les personnages à aborder des sujets plus matures.</small></span><button aria-label="Thèmes sensibles" aria-pressed={settings.matureTopics} className={settings.matureTopics ? 'toggle active' : 'toggle'} onClick={() => setSettings({ ...settings, matureTopics: !settings.matureTopics })}><i /></button></div><button className="modal-save" onClick={onClose}>Enregistrer les options</button></div> : <HypeInstallationPanel {...installationActions} />}</div></div>}
       </section>
     </div>,
@@ -1148,10 +1677,21 @@ function HypeModal({ panel, onClose, ...installationActions }: { panel: GamePane
   );
 }
 
-function HypePage({ installState, installReport, progress, hypeRunning, installHype, launchHype, stopHype, onVerify, onUpdate, onRepair, onReveal, onMove, onForget, onUninstall }: Pick<DownloadControls, 'installState' | 'installReport' | 'progress' | 'hypeRunning' | 'installHype' | 'launchHype' | 'stopHype'> & Pick<HypeInstallationActions, 'onVerify' | 'onUpdate' | 'onRepair' | 'onReveal' | 'onMove' | 'onForget' | 'onUninstall'>) {
+function HypePage({ installState, installReport, progress, hypeRunning, installHype, launchHype, stopHype, onVerify, onUpdate, onRepair, onReveal, onMove, onForget, onUninstall, onOpenProfile, readNewsKeys, onMarkNewsRead }: Pick<DownloadControls, 'installState' | 'installReport' | 'progress' | 'hypeRunning' | 'installHype' | 'launchHype' | 'stopHype'> & Pick<HypeInstallationActions, 'onVerify' | 'onUpdate' | 'onRepair' | 'onReveal' | 'onMove' | 'onForget' | 'onUninstall'> & { onOpenProfile: (userId: string) => void } & NewsReadProps) {
   const [launching, setLaunching] = useState(false);
   const [openPanel, setOpenPanel] = useState<GamePanel | null>(null);
+  const [releaseIds, setReleaseIds] = useState<number[]>([]);
   const needsRepair = installState === 'installed' && Boolean(installReport && (!installReport.executableFound || installReport.missingFiles.length || installReport.invalidFiles.length));
+  const gameFriendCount = useGameFriendCount('Hype');
+  const unreadNewsCount = releaseIds.filter((id) => !readNewsKeys.has(`hype:${id}`)).length;
+
+  useEffect(() => {
+    let active = true;
+    void launcherAdapter.getHypeReleases()
+      .then((items) => { if (active) setReleaseIds(items.map((release) => release.id)); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const installLabel = useMemo(() => {
     if (installState === 'downloading') return `Téléchargement · ${progress} %`;
@@ -1214,9 +1754,9 @@ function HypePage({ installState, installReport, progress, hypeRunning, installH
           <div className="info-card"><h3>À propos</h3><p>Un petit jeu fun de simulation de réseau social, peuplé de personnages gérés par IA. Faites des rencontres, créez du contenu et voyez jusqu’où votre histoire peut aller.</p><div><span>Développeur</span><b>Æ Games</b></div><div><span>Genre</span><b>Simulation sociale</b></div><div><span>Expérience</span><b>Solo · IA générative</b></div><div><span>Version</span><b>{installReport?.version || '0.26.0'}</b></div></div>
         </aside>
       </section>
-      <GameDock label={installLabel} icon={hypeRunning ? <X size={19} /> : needsRepair ? <Wrench size={19} /> : installState === 'installed' ? <Play size={19} fill="currentColor" /> : <Download size={19} />} onPrimary={handlePrimaryAction} onPanel={setOpenPanel} showNews friendCount={1} primaryDanger={hypeRunning} />
+      <GameDock label={installLabel} icon={hypeRunning ? <X size={19} /> : needsRepair ? <Wrench size={19} /> : installState === 'installed' ? <Play size={19} fill="currentColor" /> : <Download size={19} />} onPrimary={handlePrimaryAction} onPanel={setOpenPanel} showNews friendCount={gameFriendCount} unreadNewsCount={unreadNewsCount} primaryDanger={hypeRunning} />
       {launching && <LaunchSequence game="Hype" artwork={hypeAvatar} />}
-      {openPanel && <HypeModal panel={openPanel} onClose={() => setOpenPanel(null)} installState={installState} installReport={installReport} hypeRunning={hypeRunning} onInstall={installHype} onVerify={onVerify} onUpdate={onUpdate} onRepair={onRepair} onReveal={onReveal} onMove={onMove} onForget={onForget} onUninstall={onUninstall} />}
+      {openPanel && <HypeModal panel={openPanel} onClose={() => setOpenPanel(null)} onOpenProfile={(userId) => { setOpenPanel(null); onOpenProfile(userId); }} installState={installState} installReport={installReport} hypeRunning={hypeRunning} onInstall={installHype} onVerify={onVerify} onUpdate={onUpdate} onRepair={onRepair} onReveal={onReveal} onMove={onMove} onForget={onForget} onUninstall={onUninstall} onMarkNewsRead={onMarkNewsRead} />}
     </main>
   );
 }
@@ -1363,6 +1903,8 @@ function SettingsPage({ settings, updateSettings, effectiveScale, onChooseInstal
 
 function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [page, setPage] = useState<Page>('accueil');
+  const [selectedProfileId, setSelectedProfileId] = useState(user.id);
+  const [profileReturnPage, setProfileReturnPage] = useState<Page>('accueil');
   const [installState, setInstallState] = useState<InstallState>('available');
   const [progress, setProgress] = useState(0);
   const [downloadInfo, setDownloadInfo] = useState<HypeDownloadProgress | null>(null);
@@ -1372,17 +1914,105 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [installReport, setInstallReport] = useState<HypeInstallReport | null>(null);
   const [hypePath, setHypePath] = useState(() => localStorage.getItem('ae-hype-install-path') || '');
   const [hypeRunning, setHypeRunning] = useState(false);
+  const [readNewsKeys, setReadNewsKeys] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<LauncherSettings>(loadLauncherSettings);
   const [automaticScale, setAutomaticScale] = useState(getAutomaticInterfaceScale);
   const effectiveScale = settings.scaleMode === 'auto' ? automaticScale : settings.uiScale / 100;
+  const hypeWasRunning = useRef(false);
+  const activeGameRef = useRef<string | null>(null);
+
+  const refreshReadNews = useCallback(() => {
+    void loadReadNewsKeys(user.id).then(setReadNewsKeys).catch(() => undefined);
+  }, [user.id]);
+
+  const markNewsRead = useCallback((newsKey: string) => {
+    setReadNewsKeys((current) => current.has(newsKey) ? current : new Set([...current, newsKey]));
+    void markNewsKeyRead(user.id, newsKey).then(refreshReadNews).catch(() => undefined);
+  }, [refreshReadNews, user.id]);
+
+  useEffect(() => {
+    refreshReadNews();
+    const channel = supabase
+      .channel(`launcher-news-reads-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'launcher_news_reads', filter: `user_id=eq.${user.id}` }, refreshReadNews)
+      .subscribe();
+    const refreshOnFocus = () => refreshReadNews();
+    const refreshOnStorage = (event: StorageEvent) => { if (event.key === `ae-read-news:${user.id}`) refreshReadNews(); };
+    window.addEventListener('focus', refreshOnFocus);
+    window.addEventListener('storage', refreshOnStorage);
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus);
+      window.removeEventListener('storage', refreshOnStorage);
+      void supabase.removeChannel(channel);
+    };
+  }, [refreshReadNews, user.id]);
+
+  const openProfile = (profileId: string) => {
+    if (page !== 'profil') setProfileReturnPage(page);
+    setSelectedProfileId(profileId);
+    setPage('profil');
+  };
+
+  const publishCurrentGame = (game: string) => {
+    activeGameRef.current = game;
+    void setCurrentGame(game).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    let disposed = false;
+    let closing = false;
+    let unlistenClose: (() => void) | undefined;
+    const touch = () => void heartbeatPresence().catch(() => undefined);
+    void setCurrentGame(null).then(() => {
+      if (activeGameRef.current) return setCurrentGame(activeGameRef.current);
+      return undefined;
+    }).catch(() => undefined);
+    const heartbeat = window.setInterval(touch, 25000);
+    const handleVisibility = () => { if (document.visibilityState === 'visible') touch(); };
+    const handleBeforeUnload = () => { activeGameRef.current = null; void markPresenceOffline().catch(() => undefined); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    if (launcherAdapter.environment === 'desktop') {
+      void getCurrentWindow().onCloseRequested(async (event) => {
+        if (closing) return;
+        closing = true;
+        event.preventDefault();
+        await Promise.race([
+          markPresenceOffline().catch(() => undefined),
+          new Promise<void>((resolve) => window.setTimeout(resolve, 650)),
+        ]);
+        await getCurrentWindow().destroy();
+      }).then((unlisten) => {
+        if (disposed) unlisten();
+        else unlistenClose = unlisten;
+      }).catch(() => undefined);
+    }
+    return () => {
+      disposed = true;
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      unlistenClose?.();
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--launcher-ui-scale', String(effectiveScale));
     if (launcherAdapter.environment === 'desktop') {
-      void getCurrentWindow().setMinSize(new LogicalSize(
-        Math.ceil(MIN_INTERFACE_WIDTH * effectiveScale),
-        Math.ceil(MIN_INTERFACE_HEIGHT * effectiveScale),
-      ));
+      const minimumWidth = Math.ceil(MIN_INTERFACE_WIDTH * effectiveScale);
+      const minimumHeight = Math.ceil(MIN_INTERFACE_HEIGHT * effectiveScale);
+      const targetWidth = Math.max(minimumWidth, window.innerWidth);
+      const targetHeight = Math.max(minimumHeight, window.innerHeight);
+      const launcherWindow = getCurrentWindow();
+      const previousScale = Number(sessionStorage.getItem('ae-window-interface-scale'));
+      const mustResizeWindow = !Number.isFinite(previousScale) || Math.abs(previousScale - effectiveScale) > .001;
+      sessionStorage.setItem('ae-window-interface-scale', String(effectiveScale));
+      void launcherWindow.setMinSize(new LogicalSize(minimumWidth, minimumHeight)).then(() => {
+        if (mustResizeWindow && (Math.abs(window.innerWidth - targetWidth) > 1 || Math.abs(window.innerHeight - targetHeight) > 1)) {
+          return launcherWindow.setSize(new LogicalSize(targetWidth, targetHeight));
+        }
+        return undefined;
+      }).catch(() => undefined);
     }
     return () => {
       document.documentElement.style.removeProperty('--launcher-ui-scale');
@@ -1413,6 +2043,17 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     const timer = window.setInterval(refresh, 2000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
+
+  useEffect(() => {
+    if (hypeRunning) {
+      activeGameRef.current = 'Hype';
+      void setCurrentGame('Hype').catch(() => undefined);
+    } else if (hypeWasRunning.current) {
+      activeGameRef.current = null;
+      void setCurrentGame(null).catch(() => undefined);
+    }
+    hypeWasRunning.current = hypeRunning;
+  }, [hypeRunning]);
 
   useEffect(() => {
     const updateAutomaticScale = () => setAutomaticScale(getAutomaticInterfaceScale());
@@ -1572,16 +2213,17 @@ function Launcher({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const cancelDownload = () => { void launcherAdapter.cancelHypeDownload(); };
   return (
     <div className={`launcher-shell theme-${page} ${page === 'telechargements' ? 'theme-hype' : ''} ${settings.compactMode ? 'ui-compact' : ''} ${settings.reducedMotion ? 'ui-reduced-motion' : ''} ${settings.highContrast ? 'ui-high-contrast' : ''}`} style={{ '--ui-scale': effectiveScale } as React.CSSProperties}>
-      <Sidebar page={page} setPage={setPage} installState={installState} progress={progress} hypeRunning={hypeRunning} user={user} onSignOut={onSignOut} />
+      <Sidebar page={page} setPage={setPage} installState={installState} progress={progress} hypeRunning={hypeRunning} user={user} onSignOut={onSignOut} onOpenProfile={openProfile} />
       <section className="workspace">
-        <Topbar setPage={setPage} />
+        <Topbar setPage={setPage} onOpenProfile={openProfile} />
         <div className="workspace-scroll" key={page}>
           {page === 'accueil' && <HomePage setPage={setPage} user={user} />}
           {page === 'bibliotheque' && <LibraryPage setPage={setPage} installState={installState} installReport={installReport} hypePath={hypePath} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} />}
           {page === 'telechargements' && <DownloadsPage installState={installState} installReport={installReport} progress={progress} downloadInfo={downloadInfo} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} cancelDownload={cancelDownload} />}
           {page === 'reglages' && <SettingsPage settings={settings} updateSettings={updateSettings} effectiveScale={effectiveScale} onChooseInstall={chooseDefaultInstallDirectory} onVerifyLauncher={verifyLauncher} onReset={() => setSettings(defaultLauncherSettings)} />}
-          {page === 'laliferp' && <LifeRpPage />}
-          {page === 'hype' && <HypePage installState={installState} installReport={installReport} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} onVerify={verifyHype} onUpdate={updateHype} onRepair={repairHype} onReveal={revealHype} onMove={moveHype} onForget={forgetHype} onUninstall={uninstallHype} />}
+          {page === 'laliferp' && <LifeRpPage onGameLaunch={publishCurrentGame} onOpenProfile={openProfile} readNewsKeys={readNewsKeys} onMarkNewsRead={markNewsRead} />}
+          {page === 'hype' && <HypePage installState={installState} installReport={installReport} progress={progress} hypeRunning={hypeRunning} installHype={openInstaller} launchHype={launchHype} stopHype={stopHype} onVerify={verifyHype} onUpdate={updateHype} onRepair={repairHype} onReveal={revealHype} onMove={moveHype} onForget={forgetHype} onUninstall={uninstallHype} onOpenProfile={openProfile} readNewsKeys={readNewsKeys} onMarkNewsRead={markNewsRead} />}
+          {page === 'profil' && <PublicProfilePage userId={selectedProfileId} viewerId={user.id} onBack={() => setPage(profileReturnPage === 'profil' ? 'accueil' : profileReturnPage)} />}
         </div>
         {installState === 'downloading' && page !== 'telechargements' && <button className="download-capsule" onClick={() => setPage('telechargements')}><span className="capsule-ring" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties}><Download size={14} /></span><span><b>Hype · {progress} %</b><small>Installation depuis GitHub · Voir le transfert</small></span><ChevronRight size={16} /></button>}
       </section>
@@ -1639,6 +2281,7 @@ export default function App() {
 
   const logout = async () => {
     setAuthError('');
+    await markPresenceOffline().catch(() => undefined);
     const { error } = await supabase.auth.signOut();
     if (error) setAuthError(error.message);
   };

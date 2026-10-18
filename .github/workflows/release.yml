@@ -48,43 +48,38 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Æ Games Launcher v0.2"
+          releaseName: "Æ Games Launcher v0.3.0 — Mise à jour sociale"
           releaseBody: |
-            ## Une interface plus lisible et plus cohérente
+            ## Réseau social Æ Games
 
-            - Nouvelle hiérarchie typographique appliquée à l'ensemble du launcher.
-            - Échelle de l'interface étendue jusqu'à 200 %, avec 150 % automatiquement recommandé sur les écrans 4K.
-            - Application de l'échelle au relâchement du curseur pour éviter les déplacements de fenêtre et de souris.
-            - Taille minimale de la fenêtre synchronisée avec celle de l'interface.
-            - Nouvelle barre de titre intégrée, translucide et fonctionnelle : réduction, agrandissement et fermeture.
+            - Nouvelle pilule d'amis avec total, présence en ligne et avatars prioritaires.
+            - Listes séparées entre joueurs en jeu, en ligne et hors ligne.
+            - Profils hors ligne en noir et blanc et activité de jeu synchronisée.
+            - Menus de gestion unifiés pour ouvrir, supprimer, bloquer ou débloquer un profil.
+            - Présence actualisée au lancement, pendant une session et à la fermeture du launcher.
 
-            ## Accueil et navigation
+            ## Profils publics et personnalisation
 
-            - Accueil personnalisé avec le nom d'affichage du compte.
-            - Identité Æ Games actualisée et navigation latérale simplifiée.
-            - Æ Originals apparaît maintenant avant FiveM.
-            - Nouvelle bannière Hype cohérente avec la fiche du jeu.
+            - Nouvelle page de profil public détaillée et réactive.
+            - Bio compatible Markdown avec barre d'outils et aperçu instantané.
+            - Personnalisation du fond, des dégradés, de la couleur d'accent et de la transparence des cartes.
+            - Recadrage des photos de profil et des bannières avant enregistrement.
+            - Activité actuelle, univers Æ Games, informations sociales et identité visuelle du joueur.
 
-            ## Bibliothèque
+            ## Actualités
 
-            - Thème dynamique fidèle à chaque jeu, y compris au survol.
-            - Filtres Tous, Installés et À mettre à jour désormais fonctionnels.
-            - Choix entre l'affichage en liste et les cartes de type pochette.
-            - Préparation du futur système de tri.
+            - Suivi des actualités lues, synchronisé par compte.
+            - Notes de version GitHub rendues avec leur Markdown complet.
+            - Titres, listes, tableaux, liens, citations, blocs de code et sauts de ligne pris en charge.
+            - Illustration Hype repositionnée derrière le contenu.
 
-            ## Hype
+            ## Interface et fiabilité
 
-            - Actualités connectées au véritable fil des releases GitHub de Hype.
-            - Lecteur détaillé avec contenu complet et défilement.
-            - Identité visuelle unifiée autour de la carte sociale de la page du jeu.
-            - Nouvelle action permettant de déplacer une installation existante.
-            - Téléchargements et gestion de l'installation adaptés au thème Hype.
-
-            ## Ajustements supplémentaires
-
-            - Pilule d'amis corrigée lorsqu'aucun ami n'est en ligne.
-            - Suppression des éléments redondants dans la barre supérieure et la navigation.
-            - Nombreuses corrections d'espacement, de contraste et d'états interactifs.
+            - Barre supérieure et navigation latérale unifiées avec un fond translucide et flouté.
+            - Taille minimale de la fenêtre recalculée selon l'échelle de l'interface.
+            - Position de la fenêtre conservée lors d'un rafraîchissement avec Ctrl+R.
+            - Fermeture de la fenêtre corrigée depuis la barre du launcher et la barre des tâches Windows.
+            - Nombreux ajustements de typographie, de menus contextuels et de responsive design.
 
             L'installateur n'est pas encore signé avec un certificat Windows : un avertissement SmartScreen peut apparaître pendant cette phase de test interne.
           releaseDraft: false
