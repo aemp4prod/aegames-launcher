@@ -7,6 +7,11 @@ if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error('La configuration Supabase du launcher est incomplète.');
 }
 
+export const supabasePublicConfig = Object.freeze({
+  url: supabaseUrl,
+  publishableKey: supabasePublishableKey,
+});
+
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     flowType: 'pkce',

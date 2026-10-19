@@ -20,7 +20,7 @@ export type ProfileTheme = {
 
 export type ProfileShowcaseKey = 'universes' | 'activity' | 'achievements' | 'statistics' | 'favorite';
 export type ProfileGameKey = 'laliferp' | 'hype';
-export type ProfileAchievementKey = 'first-night' | 'model-citizen' | 'first-salary' | 'road-ace' | 'city-pillar' | 'american-dream';
+export type ProfileAchievementKey = string;
 export type ProfileStatisticKey = 'playtime' | 'achievements' | 'friends' | 'latency' | 'library' | 'active-session';
 
 export type ProfileShowcase = {
@@ -43,12 +43,11 @@ export const defaultProfileShelves: ProfileShelf[] = [
 
 const showcaseKeys: ProfileShowcaseKey[] = ['universes', 'activity', 'achievements', 'statistics', 'favorite'];
 const gameKeys: ProfileGameKey[] = ['laliferp', 'hype'];
-const achievementKeys: ProfileAchievementKey[] = ['first-night', 'model-citizen', 'first-salary', 'road-ace', 'city-pillar', 'american-dream'];
 const statisticKeys: ProfileStatisticKey[] = ['playtime', 'achievements', 'friends', 'latency', 'library', 'active-session'];
 
 export function defaultProfileShowcase(type: ProfileShowcaseKey): ProfileShowcase {
   if (type === 'universes') return { type, gameIds: [...gameKeys] };
-  if (type === 'achievements') return { type, achievementIds: ['first-night', 'model-citizen'] };
+  if (type === 'achievements') return { type, achievementIds: [] };
   if (type === 'statistics') return { type, statisticIds: ['playtime', 'achievements', 'friends'] };
   if (type === 'favorite') return { type, favoriteGameId: 'hype' };
   return { type };
@@ -63,7 +62,7 @@ function normalizeShowcase(value: unknown, fallback: ProfileShowcaseKey): Profil
     : fallback;
   const normalized = defaultProfileShowcase(type);
   if (type === 'universes' && Array.isArray(source.gameIds)) normalized.gameIds = source.gameIds.filter((key): key is ProfileGameKey => gameKeys.includes(key as ProfileGameKey));
-  if (type === 'achievements' && Array.isArray(source.achievementIds)) normalized.achievementIds = source.achievementIds.filter((key): key is ProfileAchievementKey => achievementKeys.includes(key as ProfileAchievementKey));
+  if (type === 'achievements' && Array.isArray(source.achievementIds)) normalized.achievementIds = source.achievementIds.filter((key): key is ProfileAchievementKey => typeof key === 'string' && /^[a-z0-9-]{1,80}$/.test(key));
   if (type === 'statistics' && Array.isArray(source.statisticIds)) normalized.statisticIds = source.statisticIds.filter((key): key is ProfileStatisticKey => statisticKeys.includes(key as ProfileStatisticKey));
   if (type === 'favorite' && gameKeys.includes(source.favoriteGameId as ProfileGameKey)) normalized.favoriteGameId = source.favoriteGameId as ProfileGameKey;
   return normalized;

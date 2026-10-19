@@ -2069,12 +2069,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .achievement-dashboard article > div { display: flex; flex-direction: column; gap: 5px; }
 .achievement-dashboard small { color: rgba(255,255,255,.35); font-size: 7px; }
 .achievement-dashboard strong { font-size: 18px; font-weight: 620; }
-.achievement-filter { margin-bottom: 12px; display: flex; gap: 5px; }
+.achievement-toolbar { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.achievement-filter { display: flex; gap: 5px; }
 .achievement-filter button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: rgba(255,255,255,.025); color: rgba(255,255,255,.4); font-size: 8px; cursor: pointer; }
 .achievement-filter button.active { background: rgba(var(--game-accent-rgb),.13); color: var(--game-accent); }
+.achievement-search { width: min(250px, 36%); height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 7px; border-radius: 8px; background: rgba(255,255,255,.035); color: rgba(255,255,255,.32); }
+.achievement-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: #fff; font-size: 8px; }
+.achievement-search input::placeholder { color: rgba(255,255,255,.25); }
 .achievements-modal,
 .options-modal { max-height: calc(100vh - 156px); overflow-y: auto; scrollbar-color: rgba(var(--game-accent-rgb),.4) transparent; }
 .achievement-catalog { display: flex; flex-direction: column; gap: 5px; padding-right: 4px; }
+.achievement-state { min-height: 74px; margin-bottom: 10px; padding: 14px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 12px; background: rgba(255,255,255,.027); color: rgba(255,255,255,.45); font-size: 9px; }
+.achievement-state.error { color: #f3a1a1; background: rgba(210,75,75,.08); }
+.achievement-state button { margin-left: 8px; padding: 7px 10px; border: 0; border-radius: 7px; background: rgba(255,255,255,.08); color: inherit; font: inherit; cursor: pointer; }
 .achievement-entry { min-height: 70px; padding: 10px 12px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto 40px; align-items: center; gap: 12px; border-radius: 12px; background: rgba(255,255,255,.027); }
 .achievement-entry > span:first-child { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; background: rgba(var(--game-accent-rgb),.09); color: var(--game-accent); }
 .achievement-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
@@ -2088,7 +2095,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .achievement-item-progress > i em { height: 100%; display: block; border-radius: inherit; background: var(--game-accent); }
 .achievement-item-progress strong { color: rgba(255,255,255,.43); font-size: 7px; font-weight: 550; }
 .achievement-percent,
-.achievement-lock { width: 37px !important; height: 24px !important; justify-self: center; border-radius: 7px !important; background: rgba(255,255,255,.05) !important; color: rgba(255,255,255,.45) !important; font-size: 7px; font-weight: 700; }
+.achievement-lock { width: 37px !important; height: 24px !important; display: grid !important; place-items: center; justify-self: center; border-radius: 7px !important; background: transparent !important; color: rgba(255,255,255,.48) !important; font-size: 7px; font-weight: 700; line-height: 1; }
+.release-search { width: 100%; height: 38px; margin-bottom: 14px; padding: 0 12px; display: flex; align-items: center; gap: 9px; border-radius: 10px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.045); color: rgba(255,255,255,.34); }
+.release-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: #fff; font-size: 9px; }
+.release-search input::placeholder { color: rgba(255,255,255,.25); }
+.release-search span { color: rgba(255,255,255,.28); font-size: 7px; white-space: nowrap; }
+.achievement-toast { position: fixed; z-index: 120; right: 22px; bottom: 22px; min-width: 300px; max-width: 380px; min-height: 76px; padding: 12px 14px; display: grid; grid-template-columns: 42px minmax(0,1fr) 18px; align-items: center; gap: 11px; border: 1px solid rgba(var(--game-accent-rgb),.3); border-radius: 14px; background: rgba(13,12,18,.96); color: #fff; box-shadow: 0 18px 55px rgba(0,0,0,.48); cursor: pointer; text-align: left; animation: toast-in .28s ease-out; }
+.achievement-toast > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: rgba(var(--game-accent-rgb),.13); color: var(--game-accent); }
+.achievement-toast > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.achievement-toast small { color: var(--game-accent); font-size: 7px; letter-spacing: .08em; }
+.achievement-toast b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.achievement-toast em { color: rgba(255,255,255,.36); font-size: 8px; font-style: normal; }
+.achievement-toast > svg { align-self: start; color: rgba(255,255,255,.35); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .friend-playing { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,.42); font-size: 8px; }
 .friend-playing i { width: 7px; height: 7px; border-radius: 50%; background: #4bc58a; box-shadow: 0 0 9px rgba(75,197,138,.55); }
 .news-notice { background: var(--game-accent); color: #17080d; }
@@ -2360,6 +2379,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .installer-content p { max-width: 520px; margin: 11px 0 0; color: rgba(255,255,255,.48); font-size: 10px; line-height: 1.7; }
 .installer-content code { padding: 2px 5px; border-radius: 5px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.75); font-family: inherit; }
 .installer-intro .modal-save { align-self: center; height: 42px; margin-top: 24px; padding: 0 18px; display: flex; align-items: center; gap: 8px; color: #170910; }
+.installer-version-select { width: min(330px, 100%); margin-top: 18px; display: flex; flex-direction: column; gap: 7px; text-align: left; }
+.installer-version-select span { color: rgba(255,255,255,.32); font-size: 7px; letter-spacing: .1em; }
+.installer-version-select select,
+.hype-version-picker select { height: 36px; padding: 0 11px; border: 1px solid rgba(255,255,255,.07); border-radius: 9px; outline: 0; background: rgba(0,0,0,.24); color: rgba(255,255,255,.78); font-size: 9px; }
 .installer-note { max-width: 500px; margin-top: 17px; color: rgba(255,255,255,.27); font-size: 8px; line-height: 1.55; }
 .installer-path { width: 100%; margin-top: 23px; padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; border-radius: 12px; background: rgba(255,255,255,.035); text-align: left; }
 .installer-path small,
@@ -2484,6 +2507,28 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .launcher-update-progress > i { height: 4px; margin: 9px 0 7px; display: block; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.07); }
 .launcher-update-progress > i span { height: 100%; display: block; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
 .launcher-update-progress > small { color: rgba(255,255,255,.28); font-size: 7px; }
+.launcher-update-backdrop { z-index: 140; }
+.launcher-update-modal { width: min(760px, calc(100vw - 56px)); max-height: calc(100vh - 56px); overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 18px; background: rgba(12,16,20,.98); box-shadow: 0 30px 100px rgba(0,0,0,.65); }
+.launcher-update-modal > header { min-height: 108px; padding: 22px 24px; display: flex; align-items: flex-start; justify-content: space-between; background: linear-gradient(120deg, rgba(78,170,200,.14), rgba(255,255,255,.015)); }
+.launcher-update-modal > header span { color: var(--accent-bright); font-size: 7px; letter-spacing: .13em; }
+.launcher-update-modal > header h2 { margin: 6px 0 5px; font-size: 22px; }
+.launcher-update-modal > header p { margin: 0; color: rgba(255,255,255,.4); font-size: 9px; }
+.launcher-update-modal > header button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 9px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.55); cursor: pointer; }
+.launcher-update-modal-body { padding: 20px 24px 22px; }
+.launcher-update-notes { max-height: min(350px, calc(100vh - 340px)); padding: 15px; overflow-y: auto; border-radius: 12px; background: rgba(255,255,255,.025); }
+.launcher-update-notes h3 { margin: 0 0 12px; font-size: 11px; }
+.launcher-update-notes .release-markdown li::marker { color: var(--accent); }
+.launcher-update-notes .release-markdown a { color: var(--accent-bright); }
+.launcher-update-download { margin-top: 14px; padding: 13px 14px; border-radius: 11px; background: rgba(78,170,200,.06); }
+.launcher-update-download > div { display: flex; justify-content: space-between; color: rgba(255,255,255,.68); font-size: 8px; }
+.launcher-update-download > i { height: 5px; margin: 10px 0 8px; display: block; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.07); }
+.launcher-update-download > i span { height: 100%; display: block; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+.launcher-update-download p { margin: 0; color: rgba(255,255,255,.34); font-size: 8px; }
+.launcher-update-download p.error { color: #ef7c87; }
+.launcher-update-modal footer { margin-top: 15px; display: flex; justify-content: flex-end; gap: 8px; }
+.launcher-update-modal footer button { height: 38px; padding: 0 15px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 9px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.68); font-size: 8px; font-weight: 650; cursor: pointer; }
+.launcher-update-modal footer button.primary { background: var(--accent); color: #061014; }
+.launcher-update-modal footer button:disabled { opacity: .55; cursor: wait; }
 .ui-high-contrast { --muted: #c4c8cc; --soft: #f0f2f4; --line: rgba(255,255,255,.17); }
 .ui-high-contrast .settings-row > span small,
 .ui-high-contrast .settings-nav small,
@@ -2802,6 +2847,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .maintenance-actions > button span { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .maintenance-actions b { color: rgba(246,238,242,.76); font-size: 8px; }
 .maintenance-actions small { color: rgba(246,238,242,.28); font-size: 6px; line-height: 1.4; }
+.hype-version-picker { margin-top: 10px; padding: 10px 11px; display: flex; align-items: flex-end; gap: 12px; border-radius: 10px; background: rgba(255,255,255,.022); }
+.hype-version-picker label { min-width: 210px; display: flex; flex-direction: column; gap: 6px; }
+.hype-version-picker label > span { color: rgba(255,255,255,.42); font-size: 8px; }
+.hype-version-picker small { padding-bottom: 9px; color: rgba(255,255,255,.27); font-size: 7px; }
 .spinning { animation: installation-spin .75s linear infinite; }
 @keyframes installation-spin { to { transform: rotate(360deg); } }
 .installation-feedback { margin: 10px 0 0; padding: 9px 10px; display: flex; align-items: center; gap: 7px; border-radius: 8px; background: rgba(75,197,138,.07); color: #6cd8a7; font-size: 7px; }

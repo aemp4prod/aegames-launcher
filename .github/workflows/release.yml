@@ -48,35 +48,33 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Æ Games Launcher v0.3.1 — Profils et vitrines"
+          releaseName: "Æ Games Launcher v0.4.0 — Mise à jour des succès"
           releaseBody: |
-            ## Refonte complète des profils
+            ## Succès Hype
 
-            - Identité regroupée sous une bannière au ratio constant, sans voile assombrissant.
-            - Édition du profil directement dans la page : photo, bannière, nom, pseudo, bio, statut et signature visuelle.
-            - Liste complète des amis affichée sur le profil, quel que soit leur statut de présence.
-            - Copie de la signature visuelle d'un autre joueur avec prévisualisation, validation et suppression.
-            - Signatures prédéfinies recentrées sur les thèmes des jeux L.A LifeRP et Hype.
+            - Sessions de succès sécurisées créées par le launcher et transmises uniquement au processus Hype.
+            - Progression et déverrouillages synchronisés en temps réel depuis Supabase.
+            - Notifications intégrées au launcher lors de l'obtention d'un succès.
+            - Catalogue réel avec recherche, filtres fonctionnels, rareté et succès secrets.
+            - Succès obtenus placés en premier et taux de complétion recalculé.
 
-            ## Étagères et vitrines
+            ## Profils et vitrines
 
-            - Ajout, suppression et positionnement libre des étagères depuis le mode édition.
-            - Une à trois vitrines par étagère, automatiquement alignées sur la même hauteur.
-            - Sélection des univers favoris, succès rares et statistiques à afficher.
-            - Carte grand format pour le jeu coup de cœur, avec choix du jeu.
+            - Les vitrines utilisent désormais les vrais succès Hype du joueur.
+            - Seuls les succès débloqués par moins de 10 % des joueurs sont sélectionnables comme succès rares.
+            - Les succès temporaires de L.A LifeRP ont été retirés.
 
-            ## Interface et fiabilité
+            ## Versions et actualités Hype
 
-            - Barre supérieure et navigation latérale harmonisées avec le même noir translucide et le même flou.
-            - Fonds de thèmes étendus sous toute l'interface et transitions de bibliothèque adoucies.
-            - Changement de statut depuis le mini-profil corrigé.
-            - Rafraîchissement en plein écran corrigé pour éviter le déplacement de la fenêtre.
-            - Emplacement local de Hype préservé pendant la vérification et la mise à jour du jeu.
+            - Emplacement local du jeu conservé pendant les mises à jour et en cas d'échec.
+            - Choix de la version Hype à installer, y compris les anciennes releases et préversions.
+            - Historique complet des actualités GitHub avec recherche dans les titres, versions et notes.
 
-            ## Préparation des succès Hype
+            ## Mise à jour du launcher
 
-            - Schéma Supabase versionné pour les définitions, progressions, sessions et événements idempotents.
-            - Documentation d'intégration fournie à l'équipe Hype pour le futur branchement au launcher.
+            - Nouveau modal dédié avec notes GitHub rendues en Markdown.
+            - Progression du téléchargement clairement affichée.
+            - Confirmation demandée avant le redémarrage et l'installation.
 
             L'installateur n'est pas encore signé avec un certificat Windows : un avertissement SmartScreen peut apparaître pendant cette phase de test interne.
           releaseDraft: false

@@ -70,6 +70,13 @@ export type HypeDownloadProgress = {
   total: number;
 };
 
+export type HypeAchievementLaunchConfig = {
+  supabaseUrl: string;
+  publishableKey: string;
+  sessionToken: string;
+  expiresAt: string;
+};
+
 function isHypeManifest(manifest: HypeManifest) {
   const game = typeof manifest.game === 'string'
     ? manifest.game
@@ -199,11 +206,16 @@ export const launcherAdapter = {
 
   async getHypeReleases(): Promise<HypeReleaseNews[]> {
     if (isTauri()) return invoke<HypeReleaseNews[]>('get_hype_releases');
-    const response = await fetch('https://api.github.com/repos/aemp4prod/aegames-hype/releases?per_page=6', {
-      headers: { Accept: 'application/vnd.github+json' },
-    });
-    if (!response.ok) throw new Error(`GitHub n’a pas pu charger les actualités Hype (${response.status}).`);
-    const releases = await response.json() as Array<{ id: number; name: string | null; tag_name: string; published_at: string; body: string | null; html_url: string; prerelease: boolean; draft: boolean }>;
+    const releases: Array<{ id: number; name: string | null; tag_name: string; published_at: string; body: string | null; html_url: string; prerelease: boolean; draft: boolean }> = [];
+    for (let page = 1; ; page += 1) {
+      const response = await fetch(`https://api.github.com/repos/aemp4prod/aegames-hype/releases?per_page=100&page=${page}`, {
+        headers: { Accept: 'application/vnd.github+json' },
+      });
+      if (!response.ok) throw new Error(`GitHub n’a pas pu charger les actualités Hype (${response.status}).`);
+      const batch = await response.json() as typeof releases;
+      releases.push(...batch);
+      if (batch.length < 100) break;
+    }
     return releases.filter((release) => !release.draft).map((release) => ({
       id: release.id,
       name: release.name?.trim() || release.tag_name,
@@ -215,12 +227,12 @@ export const launcherAdapter = {
     }));
   },
 
-  async installHype(path: string, onProgress: (progress: HypeDownloadProgress) => void): Promise<HypeInstallReport> {
+  async installHype(path: string, onProgress: (progress: HypeDownloadProgress) => void, version?: string): Promise<HypeInstallReport> {
     if (!isTauri()) throw new Error("L’installation de Hype nécessite l’application desktop Æ Games.");
     const { listen } = await import('@tauri-apps/api/event');
     const unlisten = await listen<HypeDownloadProgress>('hype-download-progress', (event) => onProgress(event.payload));
     try {
-      return await invoke<HypeInstallReport>('install_hype', { path });
+      return await invoke<HypeInstallReport>('install_hype', { path, version: version || null });
     } finally {
       unlisten();
     }
@@ -231,9 +243,9 @@ export const launcherAdapter = {
     await invoke('cancel_hype_download');
   },
 
-  async launchHype(path: string): Promise<void> {
+  async launchHype(path: string, achievementConfig?: HypeAchievementLaunchConfig): Promise<void> {
     if (!isTauri()) throw new Error("Hype.exe ne peut être lancé que depuis l’application desktop Æ Games.");
-    await invoke('launch_hype', { path });
+    await invoke('launch_hype', { path, achievementConfig: achievementConfig ?? null });
   },
 
   async isHypeRunning(): Promise<boolean> {
@@ -302,7 +314,7 @@ export const launcherAdapter = {
     };
   },
 
-  async installLauncherUpdate(onProgress: (percentage: number) => void): Promise<void> {
+  async downloadLauncherUpdate(onProgress: (percentage: number) => void): Promise<void> {
     if (!pendingLauncherUpdate) throw new Error('Aucune mise à jour n’est prête à être installée.');
     let downloaded = 0;
     let total = 0;
@@ -317,6 +329,10 @@ export const launcherAdapter = {
         onProgress(100);
       }
     });
+  },
+
+  async installLauncherUpdate(): Promise<void> {
+    if (!pendingLauncherUpdate) throw new Error('Aucune mise à jour n’est prête à être installée.');
     await pendingLauncherUpdate.install({ restartAfterInstall: true });
   },
 };

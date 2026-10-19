@@ -17,10 +17,9 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 
-const HYPE_MANIFEST_URL: &str =
+const HYPE_LATEST_MANIFEST_URL: &str =
     "https://github.com/aemp4prod/aegames-hype/releases/latest/download/manifest.json";
-const HYPE_RELEASES_URL: &str =
-    "https://api.github.com/repos/aemp4prod/aegames-hype/releases?per_page=6";
+const HYPE_RELEASES_URL: &str = "https://api.github.com/repos/aemp4prod/aegames-hype/releases";
 
 #[derive(Default)]
 struct HypeProcess(Mutex<Option<Child>>);
@@ -123,6 +122,41 @@ struct HypeInstallReport {
     invalid_files: Vec<String>,
     executable_found: bool,
     message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HypeAchievementLaunchConfig {
+    supabase_url: String,
+    publishable_key: String,
+    session_token: String,
+    expires_at: String,
+}
+
+impl HypeAchievementLaunchConfig {
+    fn validate(&self) -> Result<(), String> {
+        if !(self.supabase_url.starts_with("https://")
+            || self.supabase_url.starts_with("http://localhost"))
+            || self.supabase_url.len() > 2048
+        {
+            return Err("L’URL Supabase fournie à Hype est invalide.".into());
+        }
+        if self.publishable_key.is_empty() || self.publishable_key.len() > 4096 {
+            return Err("La clé publique Supabase fournie à Hype est invalide.".into());
+        }
+        if self.session_token.len() != 64
+            || !self
+                .session_token
+                .bytes()
+                .all(|value| value.is_ascii_hexdigit())
+        {
+            return Err("Le ticket de succès Hype est invalide.".into());
+        }
+        if self.expires_at.is_empty() || self.expires_at.len() > 64 {
+            return Err("L’expiration du ticket de succès Hype est invalide.".into());
+        }
+        Ok(())
+    }
 }
 
 fn text_at<'a>(value: &'a Value, keys: &[&str]) -> Vec<&'a str> {
@@ -393,12 +427,28 @@ fn validate_remote_manifest(manifest: &HypeRemoteManifest) -> Result<(), String>
     Ok(())
 }
 
-async fn fetch_hype_manifest() -> Result<HypeRemoteManifest, String> {
+fn hype_manifest_url(version: Option<&str>) -> Result<String, String> {
+    let Some(version) = version.filter(|value| !value.is_empty()) else {
+        return Ok(HYPE_LATEST_MANIFEST_URL.into());
+    };
+    if version.len() > 80
+        || !version.bytes().all(|value| {
+            value.is_ascii_alphanumeric() || matches!(value, b'.' | b'-' | b'_' | b'+')
+        })
+    {
+        return Err("La version Hype demandée est invalide.".into());
+    }
+    Ok(format!(
+        "https://github.com/aemp4prod/aegames-hype/releases/download/{version}/manifest.json"
+    ))
+}
+
+async fn fetch_hype_manifest(version: Option<&str>) -> Result<HypeRemoteManifest, String> {
     let response = reqwest::Client::builder()
         .user_agent("AE-Games-Launcher")
         .build()
         .map_err(|error| format!("Impossible de préparer la connexion à GitHub : {error}"))?
-        .get(HYPE_MANIFEST_URL)
+        .get(hype_manifest_url(version)?)
         .send()
         .await
         .map_err(|error| format!("Impossible de récupérer le manifeste Hype : {error}"))?
@@ -436,7 +486,7 @@ fn version_is_newer(remote: &str, local: Option<&str>) -> bool {
 
 #[tauri::command]
 async fn check_hype_update(path: Option<String>) -> Result<HypeReleaseInfo, String> {
-    let manifest = fetch_hype_manifest().await?;
+    let manifest = fetch_hype_manifest(None).await?;
     let local = installed_version(path.as_deref());
     Ok(HypeReleaseInfo {
         version: manifest.version.clone(),
@@ -448,20 +498,30 @@ async fn check_hype_update(path: Option<String>) -> Result<HypeReleaseInfo, Stri
 
 #[tauri::command]
 async fn get_hype_releases() -> Result<Vec<HypeReleaseNews>, String> {
-    let releases = reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .user_agent("AE-Games-Launcher")
         .build()
-        .map_err(|error| format!("Impossible de préparer la connexion à GitHub : {error}"))?
-        .get(HYPE_RELEASES_URL)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|error| format!("Impossible de récupérer les Releases Hype : {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("GitHub n’a pas fourni le fil des Releases Hype : {error}"))?
-        .json::<Vec<GithubHypeRelease>>()
-        .await
-        .map_err(|error| format!("Le fil des Releases Hype est invalide : {error}"))?;
+        .map_err(|error| format!("Impossible de préparer la connexion à GitHub : {error}"))?;
+    let mut releases = Vec::new();
+    for page in 1.. {
+        let mut batch = client
+            .get(HYPE_RELEASES_URL)
+            .query(&[("per_page", 100), ("page", page)])
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|error| format!("Impossible de récupérer les Releases Hype : {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("GitHub n’a pas fourni le fil des Releases Hype : {error}"))?
+            .json::<Vec<GithubHypeRelease>>()
+            .await
+            .map_err(|error| format!("Le fil des Releases Hype est invalide : {error}"))?;
+        let complete = batch.len() < 100;
+        releases.append(&mut batch);
+        if complete {
+            break;
+        }
+    }
 
     Ok(releases
         .into_iter()
@@ -547,9 +607,10 @@ async fn install_hype_inner(
     staging: &Path,
     backup: &Path,
     transfer: &HypeTransfer,
+    version: Option<&str>,
 ) -> Result<HypeInstallReport, String> {
     ensure_hype_target(destination)?;
-    let manifest = fetch_hype_manifest().await?;
+    let manifest = fetch_hype_manifest(version).await?;
     emit_hype_progress(app, 0, "download", 0, manifest.archive.size);
 
     let response = reqwest::Client::builder()
@@ -651,6 +712,7 @@ async fn install_hype_inner(
 async fn install_hype(
     app: AppHandle,
     path: String,
+    version: Option<String>,
     transfer: State<'_, HypeTransfer>,
 ) -> Result<HypeInstallReport, String> {
     let destination = PathBuf::from(path);
@@ -678,6 +740,7 @@ async fn install_hype(
         &staging,
         &backup,
         &transfer,
+        version.as_deref(),
     )
     .await;
     let _ = fs::remove_file(&archive_path);
@@ -725,7 +788,11 @@ fn verify_hype_installation(path: String) -> Result<HypeInstallReport, String> {
 }
 
 #[tauri::command]
-fn launch_hype(path: String, process: State<'_, HypeProcess>) -> Result<(), String> {
+fn launch_hype(
+    path: String,
+    achievement_config: Option<HypeAchievementLaunchConfig>,
+    process: State<'_, HypeProcess>,
+) -> Result<(), String> {
     let directory = PathBuf::from(path);
     let report = verify_directory(&directory)?;
     if !report.executable_found
@@ -749,8 +816,20 @@ fn launch_hype(path: String, process: State<'_, HypeProcess>) -> Result<(), Stri
             return Ok(());
         }
     }
-    let child = Command::new(&report.executable_path)
-        .current_dir(&directory)
+    if let Some(config) = achievement_config.as_ref() {
+        config.validate()?;
+    }
+    let mut command = Command::new(&report.executable_path);
+    command.current_dir(&directory);
+    if let Some(config) = achievement_config {
+        command
+            .env("AE_GAMES_GAME_ID", "hype")
+            .env("AE_GAMES_SUPABASE_URL", config.supabase_url)
+            .env("AE_GAMES_SUPABASE_KEY", config.publishable_key)
+            .env("AE_GAMES_ACHIEVEMENT_TOKEN", config.session_token)
+            .env("AE_GAMES_ACHIEVEMENT_EXPIRES_AT", config.expires_at);
+    }
+    let child = command
         .spawn()
         .map_err(|error| format!("Impossible de lancer Hype.exe : {error}"))?;
     *current = Some(child);
@@ -1007,6 +1086,41 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn achievement_config() -> HypeAchievementLaunchConfig {
+        HypeAchievementLaunchConfig {
+            supabase_url: "https://example.supabase.co".into(),
+            publishable_key: "public-key".into(),
+            session_token: "a".repeat(64),
+            expires_at: "2026-10-20T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn validates_hype_achievement_launch_config() {
+        assert!(achievement_config().validate().is_ok());
+
+        let mut invalid_token = achievement_config();
+        invalid_token.session_token = "not-a-token".into();
+        assert!(invalid_token.validate().is_err());
+
+        let mut insecure_url = achievement_config();
+        insecure_url.supabase_url = "http://example.supabase.co".into();
+        assert!(insecure_url.validate().is_err());
+    }
+
+    #[test]
+    fn builds_safe_versioned_hype_manifest_urls() {
+        assert_eq!(
+            hype_manifest_url(None).expect("latest manifest"),
+            HYPE_LATEST_MANIFEST_URL
+        );
+        assert_eq!(
+            hype_manifest_url(Some("v0.26.0")).expect("versioned manifest"),
+            "https://github.com/aemp4prod/aegames-hype/releases/download/v0.26.0/manifest.json"
+        );
+        assert!(hype_manifest_url(Some("../../unsafe")).is_err());
+    }
 
     #[test]
     fn sha256_uses_a_small_thread_stack_safely() {
