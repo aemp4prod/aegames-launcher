@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { normalizeProfileTheme, type ProfileTheme } from './auth';
+import { normalizeProfileShelves, normalizeProfileTheme, type ProfileShelf, type ProfileTheme } from './auth';
 
 export type RelationshipStatus = 'none' | 'pending' | 'accepted';
 export type RelationshipDirection = 'incoming' | 'outgoing' | null;
@@ -18,6 +18,7 @@ export type FriendProfile = {
   relationshipStatus: RelationshipStatus;
   direction: RelationshipDirection;
   theme: ProfileTheme;
+  shelves: ProfileShelf[];
 };
 
 type FriendRow = {
@@ -34,6 +35,7 @@ type FriendRow = {
   relationship_status: RelationshipStatus | null;
   direction: RelationshipDirection;
   profile_theme?: unknown;
+  profile_shelves?: unknown;
 };
 
 function mapProfile(row: FriendRow): FriendProfile {
@@ -51,6 +53,7 @@ function mapProfile(row: FriendRow): FriendProfile {
     relationshipStatus: row.relationship_status ?? 'none',
     direction: row.direction,
     theme: normalizeProfileTheme(row.profile_theme),
+    shelves: normalizeProfileShelves(row.profile_shelves),
   };
 }
 
@@ -118,6 +121,12 @@ export async function loadPublicProfile(targetUserId: string) {
   const row = ((data ?? []) as (FriendRow & { friend_count: number })[])[0];
   if (!row) throw new Error('Ce profil est introuvable ou indisponible.');
   return { ...mapProfile(row), friendCount: Number(row.friend_count) || 0 };
+}
+
+export async function loadProfileFriends(targetUserId: string) {
+  const { data, error } = await supabase.rpc('get_launcher_profile_friends', { target_user_id: targetUserId });
+  if (error) throw error;
+  return ((data ?? []) as FriendRow[]).map(mapProfile);
 }
 
 export type PublicProfile = Awaited<ReturnType<typeof loadPublicProfile>>;

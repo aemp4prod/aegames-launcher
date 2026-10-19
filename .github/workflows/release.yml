@@ -48,38 +48,35 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Æ Games Launcher v0.3.0 — Mise à jour sociale"
+          releaseName: "Æ Games Launcher v0.3.1 — Profils et vitrines"
           releaseBody: |
-            ## Réseau social Æ Games
+            ## Refonte complète des profils
 
-            - Nouvelle pilule d'amis avec total, présence en ligne et avatars prioritaires.
-            - Listes séparées entre joueurs en jeu, en ligne et hors ligne.
-            - Profils hors ligne en noir et blanc et activité de jeu synchronisée.
-            - Menus de gestion unifiés pour ouvrir, supprimer, bloquer ou débloquer un profil.
-            - Présence actualisée au lancement, pendant une session et à la fermeture du launcher.
+            - Identité regroupée sous une bannière au ratio constant, sans voile assombrissant.
+            - Édition du profil directement dans la page : photo, bannière, nom, pseudo, bio, statut et signature visuelle.
+            - Liste complète des amis affichée sur le profil, quel que soit leur statut de présence.
+            - Copie de la signature visuelle d'un autre joueur avec prévisualisation, validation et suppression.
+            - Signatures prédéfinies recentrées sur les thèmes des jeux L.A LifeRP et Hype.
 
-            ## Profils publics et personnalisation
+            ## Étagères et vitrines
 
-            - Nouvelle page de profil public détaillée et réactive.
-            - Bio compatible Markdown avec barre d'outils et aperçu instantané.
-            - Personnalisation du fond, des dégradés, de la couleur d'accent et de la transparence des cartes.
-            - Recadrage des photos de profil et des bannières avant enregistrement.
-            - Activité actuelle, univers Æ Games, informations sociales et identité visuelle du joueur.
-
-            ## Actualités
-
-            - Suivi des actualités lues, synchronisé par compte.
-            - Notes de version GitHub rendues avec leur Markdown complet.
-            - Titres, listes, tableaux, liens, citations, blocs de code et sauts de ligne pris en charge.
-            - Illustration Hype repositionnée derrière le contenu.
+            - Ajout, suppression et positionnement libre des étagères depuis le mode édition.
+            - Une à trois vitrines par étagère, automatiquement alignées sur la même hauteur.
+            - Sélection des univers favoris, succès rares et statistiques à afficher.
+            - Carte grand format pour le jeu coup de cœur, avec choix du jeu.
 
             ## Interface et fiabilité
 
-            - Barre supérieure et navigation latérale unifiées avec un fond translucide et flouté.
-            - Taille minimale de la fenêtre recalculée selon l'échelle de l'interface.
-            - Position de la fenêtre conservée lors d'un rafraîchissement avec Ctrl+R.
-            - Fermeture de la fenêtre corrigée depuis la barre du launcher et la barre des tâches Windows.
-            - Nombreux ajustements de typographie, de menus contextuels et de responsive design.
+            - Barre supérieure et navigation latérale harmonisées avec le même noir translucide et le même flou.
+            - Fonds de thèmes étendus sous toute l'interface et transitions de bibliothèque adoucies.
+            - Changement de statut depuis le mini-profil corrigé.
+            - Rafraîchissement en plein écran corrigé pour éviter le déplacement de la fenêtre.
+            - Emplacement local de Hype préservé pendant la vérification et la mise à jour du jeu.
+
+            ## Préparation des succès Hype
+
+            - Schéma Supabase versionné pour les définitions, progressions, sessions et événements idempotents.
+            - Documentation d'intégration fournie à l'équipe Hype pour le futur branchement au launcher.
 
             L'installateur n'est pas encore signé avec un certificat Windows : un avertissement SmartScreen peut apparaître pendant cette phase de test interne.
           releaseDraft: false

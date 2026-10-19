@@ -12,6 +12,10 @@ supabase/migrations/*
 !supabase/migrations/202610180002_social_presence_fixes.sql
 !supabase/migrations/202610180003_news_read_tracking.sql
 !supabase/migrations/202610180004_profile_customization.sql
+!supabase/migrations/202610190001_profile_shelves.sql
+!supabase/migrations/202610190002_profile_social_showcases.sql
+!supabase/migrations/202610190003_hype_achievements.sql
+!supabase/migrations/202610190004_profile_friend_visibility.sql
 *.log
 *.tsbuildinfo
 vite.config.js

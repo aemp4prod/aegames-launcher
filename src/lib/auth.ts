@@ -18,6 +18,74 @@ export type ProfileTheme = {
   surfaceOpacity: number;
 };
 
+export type ProfileShowcaseKey = 'universes' | 'activity' | 'achievements' | 'statistics' | 'favorite';
+export type ProfileGameKey = 'laliferp' | 'hype';
+export type ProfileAchievementKey = 'first-night' | 'model-citizen' | 'first-salary' | 'road-ace' | 'city-pillar' | 'american-dream';
+export type ProfileStatisticKey = 'playtime' | 'achievements' | 'friends' | 'latency' | 'library' | 'active-session';
+
+export type ProfileShowcase = {
+  type: ProfileShowcaseKey;
+  gameIds?: ProfileGameKey[];
+  achievementIds?: ProfileAchievementKey[];
+  statisticIds?: ProfileStatisticKey[];
+  favoriteGameId?: ProfileGameKey;
+};
+
+export type ProfileShelf = {
+  id: string;
+  layout: 1 | 2 | 3;
+  slots: ProfileShowcase[];
+};
+
+export const defaultProfileShelves: ProfileShelf[] = [
+  { id: 'universes', layout: 2, slots: [{ type: 'universes', gameIds: ['laliferp', 'hype'] }, { type: 'activity' }] },
+];
+
+const showcaseKeys: ProfileShowcaseKey[] = ['universes', 'activity', 'achievements', 'statistics', 'favorite'];
+const gameKeys: ProfileGameKey[] = ['laliferp', 'hype'];
+const achievementKeys: ProfileAchievementKey[] = ['first-night', 'model-citizen', 'first-salary', 'road-ace', 'city-pillar', 'american-dream'];
+const statisticKeys: ProfileStatisticKey[] = ['playtime', 'achievements', 'friends', 'latency', 'library', 'active-session'];
+
+export function defaultProfileShowcase(type: ProfileShowcaseKey): ProfileShowcase {
+  if (type === 'universes') return { type, gameIds: [...gameKeys] };
+  if (type === 'achievements') return { type, achievementIds: ['first-night', 'model-citizen'] };
+  if (type === 'statistics') return { type, statisticIds: ['playtime', 'achievements', 'friends'] };
+  if (type === 'favorite') return { type, favoriteGameId: 'hype' };
+  return { type };
+}
+
+function normalizeShowcase(value: unknown, fallback: ProfileShowcaseKey): ProfileShowcase {
+  const legacyType = typeof value === 'string' ? value : undefined;
+  const source = value && typeof value === 'object' ? value as Partial<ProfileShowcase> : {};
+  const requestedType = legacyType ?? source.type;
+  const type = showcaseKeys.includes(requestedType as ProfileShowcaseKey)
+    ? requestedType as ProfileShowcaseKey
+    : fallback;
+  const normalized = defaultProfileShowcase(type);
+  if (type === 'universes' && Array.isArray(source.gameIds)) normalized.gameIds = source.gameIds.filter((key): key is ProfileGameKey => gameKeys.includes(key as ProfileGameKey));
+  if (type === 'achievements' && Array.isArray(source.achievementIds)) normalized.achievementIds = source.achievementIds.filter((key): key is ProfileAchievementKey => achievementKeys.includes(key as ProfileAchievementKey));
+  if (type === 'statistics' && Array.isArray(source.statisticIds)) normalized.statisticIds = source.statisticIds.filter((key): key is ProfileStatisticKey => statisticKeys.includes(key as ProfileStatisticKey));
+  if (type === 'favorite' && gameKeys.includes(source.favoriteGameId as ProfileGameKey)) normalized.favoriteGameId = source.favoriteGameId as ProfileGameKey;
+  return normalized;
+}
+
+export function normalizeProfileShelves(value: unknown): ProfileShelf[] {
+  if (!Array.isArray(value)) return defaultProfileShelves.map((shelf) => ({ ...shelf, slots: [...shelf.slots] }));
+  return value.slice(0, 8).flatMap((item, index) => {
+    if (!item || typeof item !== 'object') return [];
+    const candidate = item as Partial<ProfileShelf>;
+    const layout = candidate.layout === 1 || candidate.layout === 3 ? candidate.layout : 2;
+    const slots = Array.isArray(candidate.slots)
+      ? candidate.slots.slice(0, layout).map((slot, slotIndex) => normalizeShowcase(slot, showcaseKeys[(index + slotIndex) % showcaseKeys.length]))
+      : [];
+    while (slots.length < layout) {
+      const fallback = showcaseKeys[(index + slots.length) % showcaseKeys.length];
+      slots.push(defaultProfileShowcase(fallback));
+    }
+    return [{ id: typeof candidate.id === 'string' && candidate.id ? candidate.id.slice(0, 80) : `shelf-${index + 1}`, layout, slots }];
+  });
+}
+
 export const defaultProfileTheme: ProfileTheme = {
   mode: 'gradient',
   background: '#10111b',
@@ -51,6 +119,7 @@ export type ProfileData = {
   bannerDataUrl?: string;
   status: PresenceStatus;
   theme: ProfileTheme;
+  shelves: ProfileShelf[];
 };
 
 const handledCodes = new Set<string>();
@@ -111,6 +180,7 @@ export function profileFromUser(user: User): ProfileData {
     avatarDataUrl: textValue(metadata.avatar_url, identityData?.avatar_url),
     status: 'online',
     theme: defaultProfileTheme,
+    shelves: defaultProfileShelves,
   };
 }
 
@@ -118,7 +188,7 @@ export async function loadProfile(user: User): Promise<ProfileData> {
   const fallback = profileFromUser(user);
   const { data, error } = await supabase
     .from('profiles')
-    .select('display_name, username, bio, avatar_url, banner_data_url, presence_status, profile_theme')
+    .select('display_name, username, bio, avatar_url, banner_data_url, presence_status, profile_theme, profile_shelves')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -133,6 +203,7 @@ export async function loadProfile(user: User): Promise<ProfileData> {
     bannerDataUrl: data.banner_data_url || undefined,
     status: data.presence_status === 'busy' || data.presence_status === 'invisible' ? data.presence_status : 'online',
     theme: normalizeProfileTheme(data.profile_theme),
+    shelves: normalizeProfileShelves(data.profile_shelves),
   };
 }
 
@@ -150,6 +221,7 @@ export async function saveProfile(user: User, profile: ProfileData) {
     banner_data_url: profile.bannerDataUrl ?? null,
     presence_status: profile.status,
     profile_theme: normalizeProfileTheme(profile.theme),
+    profile_shelves: normalizeProfileShelves(profile.shelves),
   });
   if (error?.code === '23505') throw new Error('Ce pseudo est déjà utilisé.');
   if (error) throw error;
@@ -161,7 +233,9 @@ export type ProfileCustomization = {
   bio: string;
   avatarDataUrl?: string;
   bannerDataUrl?: string;
+  status: PresenceStatus;
   theme: ProfileTheme;
+  shelves: ProfileShelf[];
 };
 
 export async function saveProfileCustomization(userId: string, customization: ProfileCustomization) {
@@ -179,7 +253,9 @@ export async function saveProfileCustomization(userId: string, customization: Pr
       bio: customization.bio.trim(),
       avatar_url: customization.avatarDataUrl ?? null,
       banner_data_url: customization.bannerDataUrl ?? null,
+      presence_status: customization.status,
       profile_theme: normalizeProfileTheme(customization.theme),
+      profile_shelves: normalizeProfileShelves(customization.shelves),
     })
     .eq('id', userId)
     .select('id')
@@ -199,6 +275,28 @@ export async function saveProfileMedia(user: User, kind: 'avatarDataUrl' | 'bann
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('La nouvelle image n’a pas été enregistrée par Supabase.');
+}
+
+export async function savePresenceStatus(userId: string, status: PresenceStatus) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ presence_status: status })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Le statut n’a pas pu être enregistré.');
+}
+
+export async function saveProfileTheme(userId: string, theme: ProfileTheme) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ profile_theme: normalizeProfileTheme(theme) })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('La signature visuelle n’a pas pu être enregistrée.');
 }
 
 export async function isUsernameAvailable(username: string) {
