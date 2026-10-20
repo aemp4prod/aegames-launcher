@@ -30,6 +30,66 @@ struct HypeTransfer {
     cancel: AtomicBool,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HypeInstallLocation {
+    path: String,
+}
+
+fn hype_install_location_file(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join("hype-install-location.json"))
+        .map_err(|error| format!("Impossible d’accéder à la configuration du launcher : {error}"))
+}
+
+fn persist_hype_install_path(app: &AppHandle, path: &str) -> Result<(), String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("Le chemin d’installation de Hype est vide.".into());
+    }
+    let file = hype_install_location_file(app)?;
+    let parent = file
+        .parent()
+        .ok_or("Le dossier de configuration du launcher est invalide.")?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Impossible de préparer la configuration du launcher : {error}"))?;
+    fs::write(
+        file,
+        serde_json::to_vec_pretty(&HypeInstallLocation { path: path.into() })
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("Impossible de mémoriser l’emplacement de Hype : {error}"))
+}
+
+#[tauri::command]
+fn load_hype_install_path(app: AppHandle) -> Result<Option<String>, String> {
+    let file = hype_install_location_file(&app)?;
+    if !file.is_file() {
+        return Ok(None);
+    }
+    let location: HypeInstallLocation = serde_json::from_slice(
+        &fs::read(file).map_err(|error| format!("Impossible de lire l’emplacement de Hype : {error}"))?,
+    )
+    .map_err(|error| format!("L’emplacement mémorisé de Hype est invalide : {error}"))?;
+    Ok((!location.path.trim().is_empty()).then_some(location.path))
+}
+
+#[tauri::command]
+fn save_hype_install_path(app: AppHandle, path: String) -> Result<(), String> {
+    persist_hype_install_path(&app, &path)
+}
+
+#[tauri::command]
+fn clear_hype_install_path(app: AppHandle) -> Result<(), String> {
+    let file = hype_install_location_file(&app)?;
+    match fs::remove_file(file) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("Impossible d’oublier l’emplacement de Hype : {error}")),
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HypeGameIdentity {
@@ -715,6 +775,7 @@ async fn install_hype(
     version: Option<String>,
     transfer: State<'_, HypeTransfer>,
 ) -> Result<HypeInstallReport, String> {
+    persist_hype_install_path(&app, &path)?;
     let destination = PathBuf::from(path);
     let parent = destination
         .parent()
@@ -762,6 +823,7 @@ fn cancel_hype_download(transfer: State<'_, HypeTransfer>) -> Result<(), String>
 
 #[tauri::command]
 fn select_hype_installation(
+    app: AppHandle,
     default_path: Option<String>,
 ) -> Result<Option<HypeInstallReport>, String> {
     let mut dialog = rfd::FileDialog::new().set_title("Choisir l’emplacement de Hype");
@@ -771,7 +833,7 @@ fn select_hype_installation(
     let Some(selected) = dialog.pick_folder() else {
         return Ok(None);
     };
-    if let Some(directory) = find_hype_directory(&selected) {
+    let report = if let Some(directory) = find_hype_directory(&selected) {
         verify_directory(&directory).map(Some)
     } else if selected.join("Hype.exe").is_file() {
         adopt_legacy_installation(&selected).map(Some)
@@ -779,7 +841,11 @@ fn select_hype_installation(
         adopt_legacy_installation(&selected.join("Hype")).map(Some)
     } else {
         prepare_hype_directory(&selected).map(Some)
+    }?;
+    if let Some(report) = report.as_ref() {
+        persist_hype_install_path(&app, &report.path)?;
     }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -917,6 +983,7 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
 
 #[tauri::command]
 fn move_hype_installation(
+    app: AppHandle,
     path: String,
     process: State<'_, HypeProcess>,
 ) -> Result<Option<HypeInstallReport>, String> {
@@ -951,7 +1018,7 @@ fn move_hype_installation(
         return Err("Un dossier Hype existe déjà à cet emplacement.".into());
     }
 
-    match fs::rename(&source, &destination) {
+    let report = match fs::rename(&source, &destination) {
         Ok(()) => match verify_directory(&destination) {
             Ok(report) => Ok(Some(report)),
             Err(error) => {
@@ -978,11 +1045,15 @@ fn move_hype_installation(
             })?;
             Ok(Some(report))
         }
+    }?;
+    if let Some(report) = report.as_ref() {
+        persist_hype_install_path(&app, &report.path)?;
     }
+    Ok(report)
 }
 
 #[tauri::command]
-fn uninstall_hype(path: String, process: State<'_, HypeProcess>) -> Result<(), String> {
+fn uninstall_hype(app: AppHandle, path: String, process: State<'_, HypeProcess>) -> Result<(), String> {
     let requested = PathBuf::from(path);
     verify_directory(&requested)?;
     let directory = requested
@@ -1010,7 +1081,8 @@ fn uninstall_hype(path: String, process: State<'_, HypeProcess>) -> Result<(), S
         *current = None;
     }
     fs::remove_dir_all(&directory)
-        .map_err(|error| format!("Impossible de désinstaller Hype : {error}"))
+        .map_err(|error| format!("Impossible de désinstaller Hype : {error}"))?;
+    clear_hype_install_path(app)
 }
 
 #[tauri::command]
@@ -1066,6 +1138,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_hype_update,
             get_hype_releases,
+            load_hype_install_path,
+            save_hype_install_path,
+            clear_hype_install_path,
             install_hype,
             cancel_hype_download,
             select_hype_installation,

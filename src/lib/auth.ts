@@ -21,7 +21,7 @@ export type ProfileTheme = {
 export type ProfileShowcaseKey = 'universes' | 'activity' | 'achievements' | 'statistics' | 'favorite';
 export type ProfileGameKey = 'laliferp' | 'hype';
 export type ProfileAchievementKey = string;
-export type ProfileStatisticKey = 'playtime' | 'achievements' | 'friends' | 'latency' | 'library' | 'active-session';
+export type ProfileStatisticKey = 'playtime' | 'sessions' | 'average-session' | 'longest-session' | 'active-days' | 'streak' | 'achievements' | 'friends' | 'latency' | 'library' | 'active-session';
 
 export type ProfileShowcase = {
   type: ProfileShowcaseKey;
@@ -43,7 +43,7 @@ export const defaultProfileShelves: ProfileShelf[] = [
 
 const showcaseKeys: ProfileShowcaseKey[] = ['universes', 'activity', 'achievements', 'statistics', 'favorite'];
 const gameKeys: ProfileGameKey[] = ['laliferp', 'hype'];
-const statisticKeys: ProfileStatisticKey[] = ['playtime', 'achievements', 'friends', 'latency', 'library', 'active-session'];
+const statisticKeys: ProfileStatisticKey[] = ['playtime', 'sessions', 'average-session', 'longest-session', 'active-days', 'streak', 'achievements', 'friends', 'latency', 'library', 'active-session'];
 
 export function defaultProfileShowcase(type: ProfileShowcaseKey): ProfileShowcase {
   if (type === 'universes') return { type, gameIds: [...gameKeys] };

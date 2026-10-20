@@ -100,21 +100,6 @@ export async function loadBlockedProfiles() {
   return ((data ?? []) as FriendRow[]).map(mapProfile);
 }
 
-export async function setCurrentGame(game: string | null) {
-  const { error } = await supabase.rpc('set_launcher_current_game', { game_name: game });
-  if (error) throw error;
-}
-
-export async function heartbeatPresence() {
-  const { error } = await supabase.rpc('touch_launcher_presence');
-  if (error) throw error;
-}
-
-export async function markPresenceOffline() {
-  const { error } = await supabase.rpc('disconnect_launcher_presence');
-  if (error) throw error;
-}
-
 export async function loadPublicProfile(targetUserId: string) {
   const { data, error } = await supabase.rpc('get_launcher_public_profile', { target_user_id: targetUserId });
   if (error) throw error;

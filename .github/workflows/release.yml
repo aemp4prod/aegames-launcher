@@ -48,33 +48,35 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Æ Games Launcher v0.4.0 — Mise à jour des succès"
+          releaseName: "v0.5.0 — Mise à jour des statistiques"
           releaseBody: |
-            ## Succès Hype
+            ## Statistiques de jeu
 
-            - Sessions de succès sécurisées créées par le launcher et transmises uniquement au processus Hype.
-            - Progression et déverrouillages synchronisés en temps réel depuis Supabase.
-            - Notifications intégrées au launcher lors de l'obtention d'un succès.
-            - Catalogue réel avec recherche, filtres fonctionnels, rareté et succès secrets.
-            - Succès obtenus placés en premier et taux de complétion recalculé.
+            - Suivi automatique du temps de jeu, des sessions, des jours actifs et des séries.
+            - Nouveau modal complet avec vue d'ensemble, graphiques interactifs, records et historique.
+            - Filtres sur 7, 30 et 90 jours, un an ou toute la période.
+            - Statistiques réutilisées sur l'accueil, la bibliothèque, la page Hype et les vitrines de profil.
 
             ## Profils et vitrines
 
-            - Les vitrines utilisent désormais les vrais succès Hype du joueur.
-            - Seuls les succès débloqués par moins de 10 % des joueurs sont sélectionnables comme succès rares.
-            - Les succès temporaires de L.A LifeRP ont été retirés.
+            - Liste d'amis fiabilisée et entièrement visible sur les profils.
+            - Étagères et vitrines réorganisables par glisser-déposer avec prévisualisation animée.
+            - Menus déroulants remplacés par des composants personnalisés cohérents avec le thème.
 
-            ## Versions et actualités Hype
+            ## Interface
 
-            - Emplacement local du jeu conservé pendant les mises à jour et en cas d'échec.
-            - Choix de la version Hype à installer, y compris les anciennes releases et préversions.
-            - Historique complet des actualités GitHub avec recherche dans les titres, versions et notes.
+            - Barres de navigation homogènes avec le fond de page, assombrissement et flou adaptés.
+            - Actualités non lues signalées par une pastille compacte « ✦ NOUVEAU ».
+            - Carte de reprise basée sur le dernier jeu lancé et ses statistiques réelles.
 
-            ## Mise à jour du launcher
+            ## Installation de Hype
 
-            - Nouveau modal dédié avec notes GitHub rendues en Markdown.
-            - Progression du téléchargement clairement affichée.
-            - Confirmation demandée avant le redémarrage et l'installation.
+            - Emplacement du jeu mémorisé durablement entre les téléchargements et les redémarrages.
+            - Suppression de la demande de dossier superflue lorsqu'une installation valide est déjà liée.
+
+            ## Infrastructure
+
+            - Réduction des écritures de présence et des requêtes responsables d'une consommation excessive des logs Supabase.
 
             L'installateur n'est pas encore signé avec un certificat Windows : un avertissement SmartScreen peut apparaître pendant cette phase de test interne.
           releaseDraft: false

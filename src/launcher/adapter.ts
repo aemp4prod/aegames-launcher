@@ -180,6 +180,21 @@ async function invoke<T>(command: string, args?: Record<string, unknown>) {
 export const launcherAdapter = {
   environment: isTauri() ? 'desktop' as const : 'browser' as const,
 
+  async loadHypeInstallPath(): Promise<string | null> {
+    if (!isTauri()) return localStorage.getItem('ae-hype-install-path');
+    return invoke<string | null>('load_hype_install_path');
+  },
+
+  async saveHypeInstallPath(path: string): Promise<void> {
+    localStorage.setItem('ae-hype-install-path', path);
+    if (isTauri()) await invoke('save_hype_install_path', { path });
+  },
+
+  async clearHypeInstallPath(): Promise<void> {
+    localStorage.removeItem('ae-hype-install-path');
+    if (isTauri()) await invoke('clear_hype_install_path');
+  },
+
   async selectHypeInstallation(defaultPath?: string): Promise<HypeInstallReport | null> {
     if (isTauri()) return invoke<HypeInstallReport | null>('select_hype_installation', { defaultPath: defaultPath || null });
     const picker = (window as Window & {
